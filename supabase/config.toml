@@ -18,7 +18,6 @@ max_rows = 1000
 [auth]
 # Increase if you need longer token expiration times
 enable_signup = true
-enable_confirmations = true
 
 [realtime]
 # Enable realtime subscriptions
