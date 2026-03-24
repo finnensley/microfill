@@ -54,6 +54,8 @@ export async function POST(req: Request) {
       }
 
       // Atomically increment committed quantity using database function
+      // This prevents race conditions even under extreme concurrent load
+      // See: supabase/migrations/20260324024110_init_schema.sql for details
       const { error: syncError } = await supabase.rpc(
         'increment_committed_quantity',
         {

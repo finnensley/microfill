@@ -6,9 +6,18 @@
 -- to prevent oversells during high-concurrency events.
 --
 -- Three-Layer Protection:
--- 1. Atomic Increments: committed_quantity updates prevents race conditions
--- 2. Safety Buffering: safety_floor_quantity hides stock from Shopify during latency
--- 3. Flash Mode: manual toggle to pause API syncs during peak surges
+-- 1. Atomic Increments: committed_quantity uses SQL-level atomic updates (not Read-Modify-Write)
+--    PROBLEM: Traditional middleware reads the value, decrements it, writes it back.
+--    If 2 orders come at the exact millisecond:
+--      - Both read 10 → Both subtract 1 → Both write 9 (data loss!)
+--    SOLUTION: UPDATE committed_quantity = committed_quantity + amount
+--    This happens INSIDE the DB engine, preventing race conditions at any concurrency level.
+--
+-- 2. Safety Buffering: safety_floor_quantity hides the last 5-10% of stock from Shopify
+--    This absorbs API latency during peak surges without overselling.
+--
+-- 3. Flash Mode: manual toggle to pause outgoing API syncs during extreme peaks
+--    Then one-click reconciliation afterward.
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
