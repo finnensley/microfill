@@ -17,11 +17,26 @@ const SHIPHERO_WEBHOOK_SECRET = process.env.SHIPHERO_WEBHOOK_SECRET!;
  */
 export async function POST(req: Request) {
   try {
-    // 1. Get raw body for HMAC verification
+    // 1. Extract tenant_id from header (for multi-tenancy support)
+    // ShipHero webhooks should include X-Shopify-Shop-ID or custom tenant identifier
+    const tenantId =
+      req.headers.get("x-shopify-shop-id") || req.headers.get("x-tenant-id");
+
+    if (!tenantId) {
+      console.error(
+        "Missing tenant ID header (x-shopify-shop-id or x-tenant-id)",
+      );
+      return NextResponse.json(
+        { error: "Missing tenant identifier" },
+        { status: 400 },
+      );
+    }
+
+    // 2. Get raw body for HMAC verification
     const rawBody = await req.text();
     const hmacHeader = req.headers.get("x-shiphero-webhook-signature");
 
-    // 2. Verify HMAC signature - Prevent unauthorized webhook calls
+    // 3. Verify HMAC signature - Prevent unauthorized webhook calls
     if (!hmacHeader) {
       console.error("Missing ShipHero HMAC header");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -32,19 +47,19 @@ export async function POST(req: Request) {
       .update(rawBody, "utf8")
       .digest("base64");
 
-    // 3. Security Check: Compare hashes
+    // 4. Security Check: Compare hashes
     if (generatedHash !== hmacHeader) {
       console.error("Invalid ShipHero Webhook Signature");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 4. Parse and normalize based on webhook type
+    // 5. Parse and normalize based on webhook type
     const body = JSON.parse(rawBody);
 
     if (body.webhook_type === "PO Update") {
-      return handlePOUpdate(body as ShipHeroPOUpdate);
+      return handlePOUpdate(body as ShipHeroPOUpdate, tenantId);
     } else if (body.webhook_type === "Shipment Update") {
-      return handleShipmentUpdate(body as ShipHeroShipmentUpdate);
+      return handleShipmentUpdate(body as ShipHeroShipmentUpdate, tenantId);
     }
 
     return NextResponse.json(
@@ -63,7 +78,7 @@ export async function POST(req: Request) {
 /**
  * Normalize ShipHero PO Update to generic InventoryEvent
  */
-async function handlePOUpdate(body: ShipHeroPOUpdate) {
+async function handlePOUpdate(body: ShipHeroPOUpdate, tenantId: string) {
   if (!body.line_items || body.line_items.length === 0) {
     return NextResponse.json(
       { message: "No items to process" },
@@ -78,6 +93,7 @@ async function handlePOUpdate(body: ShipHeroPOUpdate) {
     quantity: item.quantity_received,
     source: "shiphero" as const,
     externalId: body.po_number,
+    tenantId,
   }));
 
   // Process using shared service
@@ -97,7 +113,10 @@ async function handlePOUpdate(body: ShipHeroPOUpdate) {
 /**
  * Normalize ShipHero Shipment Update to generic InventoryEvent
  */
-async function handleShipmentUpdate(body: ShipHeroShipmentUpdate) {
+async function handleShipmentUpdate(
+  body: ShipHeroShipmentUpdate,
+  tenantId: string,
+) {
   if (!body.line_items || body.line_items.length === 0) {
     return NextResponse.json(
       { message: "No items to process" },
@@ -112,6 +131,7 @@ async function handleShipmentUpdate(body: ShipHeroShipmentUpdate) {
     quantity: item.quantity,
     source: "shiphero" as const,
     externalId: body.order_number,
+    tenantId,
   }));
 
   // Process using shared service

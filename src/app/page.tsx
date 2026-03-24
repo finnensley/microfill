@@ -1,17 +1,17 @@
-'use client'
+"use client";
 
-import { useState } from 'react';
-import { supabase } from '@/lib/supabase-client'; 
+import { useState } from "react";
+import { supabase } from "@/lib/supabase-client";
 
 export default function LandingPage() {
-  const [email, setEmail] = useState('');
-  const [status, setStatus] = useState('');
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("");
 
-  const handleSubscribe = async (e) => {
+  const handleSubscribe = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const { error } = await supabase.from('leads').insert([{ email }]);
-    if (error) setStatus('Error joining list.');
-    else setStatus('You’re on the list! We’ll reach out for the pilot.');
+    const { error } = await supabase.from("leads").insert([{ email }]);
+    if (error) setStatus("Error joining list.");
+    else setStatus("You’re on the list! We’ll reach out for the pilot.");
   };
 
   return (
@@ -21,16 +21,18 @@ export default function LandingPage() {
           soloSoftwareDev LLC Presents
         </h2>
         <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tight">
-          Eliminate <span className="text-slate-400 italic">Shadow Inventory.</span>
+          Eliminate{" "}
+          <span className="text-slate-400 italic">Shadow Inventory.</span>
         </h1>
         <p className="text-xl text-slate-400 mb-10 leading-relaxed">
-          The lightweight, security-first sync tool for micro-fulfillment. 
-          Stop manual tallying. Scan in, sync out, and never oversell again.
+          The lightweight, security-first sync tool for micro-fulfillment. Stop
+          manual tallying. Scan in, sync out, and never oversell again.
         </p>
 
-        <form 
-        onSubmit={handleSubscribe} 
-        className="flex flex-col md:flex-row gap-4 justify-center">
+        <form
+          onSubmit={handleSubscribe}
+          className="flex flex-col md:flex-row gap-4 justify-center"
+        >
           <input
             type="email"
             placeholder="Enter your work email"
@@ -43,9 +45,9 @@ export default function LandingPage() {
             Request Pilot Access
           </button>
         </form>
-        
+
         {status && <p className="mt-4 text-green-400 font-medium">{status}</p>}
-        
+
         <div className="mt-16 grid grid-cols-1 md:grid-cols-3 gap-8 text-sm text-slate-500 uppercase tracking-widest">
           <div>✓ Shopify Verified</div>
           <div>✓ AES-256 Encrypted</div>

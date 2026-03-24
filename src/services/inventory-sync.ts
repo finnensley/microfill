@@ -10,6 +10,7 @@ export interface InventoryEvent {
   quantity: number;
   source: "shopify" | "shiphero" | "fishbowl" | "netsuite"; // Track WMS origin
   externalId: string; // WMS order/PO number for audit trail
+  tenantId: string; // Required for multi-tenancy: Shopify shop_id, warehouse_id, etc.
   timestamp?: Date;
 }
 
@@ -26,6 +27,7 @@ export async function processSyncEvent(
   try {
     if (event.type === "stock_received") {
       const { error } = await supabase.rpc("sync_shiphero_receiving", {
+        tenant_id_input: event.tenantId,
         sku_input: event.sku,
         qty_received: event.quantity,
       });
@@ -46,6 +48,7 @@ export async function processSyncEvent(
 
     if (event.type === "stock_shipped") {
       const { error } = await supabase.rpc("sync_shiphero_shipment", {
+        tenant_id_input: event.tenantId,
         sku_input: event.sku,
         qty_shipped: event.quantity,
       });
@@ -64,7 +67,7 @@ export async function processSyncEvent(
       return true;
     }
 
-    console.warn(`Unknown event type: ${(event as any).type}`);
+    console.warn(`Unknown event type: ${event.type}`);
     return false;
   } catch (err) {
     console.error(`[${event.source}] Sync error:`, err);
@@ -84,7 +87,11 @@ export async function processSyncEventsBatch(
 
   for (const event of events) {
     const result = await processSyncEvent(event);
-    result ? succeeded++ : failed++;
+    if (result) {
+      succeeded++;
+    } else {
+      failed++;
+    }
   }
 
   console.log(`Batch complete: ${succeeded} succeeded, ${failed} failed`);
