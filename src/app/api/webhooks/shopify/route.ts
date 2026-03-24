@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { crypto } from 'crypto';
+import crypto from 'crypto';
 import { supabase } from '@/lib/supabase-client';
 
 // Your Shopify Webhook Secret from Shopify Admin Settings
