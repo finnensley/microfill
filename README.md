@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+MicroFill: High-Concurrency Inventory Engine
+By soloSoftwareDev LLC
 
-## Getting Started
+  MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" and prevent oversells during high-traffic Shopify launches ($1M+ events). Unlike traditional middleware, MicroFill utilizes Atomic SQL buffering to handle race conditions that break standard API-based sync tools.
 
-First, run the development server:
+- Core Architecture
+  - Framework: Next.js 15 (App Router, TypeScript, Tailwind)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+  - Database: PostgreSQL (Supabase) with PL/pgSQL Atomic Functions
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+  - Auth: Supabase Auth (OTP & OAuth)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+  - Infrastructure: Edge Functions for HMAC-verified Shopify Webhooks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+  - Communications: Resend (Transactional Alerts & Weekly Reports)
 
-## Learn More
+- Project Structure
+  /src
+   ├── app/api/webhooks  # HMAC-verified Shopify entry points
+   ├── components/ui     # Atomic Shadcn components
+   ├── hooks/            # useInventory (Real-time DB subscriptions)
+   ├── lib/              # Supabase & Stripe singleton clients
+   ├── services/         # Shopify Admin API wrappers
+   └── types/            # Strict TypeScript inventory interfaces
 
-To learn more about Next.js, take a look at the following resources:
+- The "Triple-Sync" Fail-Safe
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+  MicroFill solves the Race Condition problem through three layers of protection:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+  1. Atomic Increments: We use rpc calls to increment committed_quantity directly in the DB engine, preventing "Read-Modify-Write" data loss.
 
-## Deploy on Vercel
+  2. Safety Buffering: A user-defined "Safety Floor" hides the last 5-10% of stock from Shopify to absorb API latency.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+  3. Flash Mode: A manual toggle that pauses outgoing API updates during peak surges to let Shopify's native engine handle the "Heat," followed by a one-click reconciliation.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Development Setup
+  1. Environment: Copy .env.example to .env.local and add your SUPABASE_SERVICE_ROLE_KEY and SHOPIFY_WEBHOOK_SECRET.
+  
+  2. Database: Run the migrations in /supabase/migrations to set up the inventory_items table and the check_inventory_threshold trigger.
+
+  3. Install: npm install
+
+  4. Dev: npm run dev
+
+- Legal & Licensing
+Property of soloSoftwareDev LLC. All rights reserved.
+Unauthorized copying of the "Atomic Buffering" logic is strictly prohibited.
+
