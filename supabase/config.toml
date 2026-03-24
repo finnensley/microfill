@@ -1,0 +1,29 @@
+# Supabase CLI Configuration
+# Reference: https://supabase.com/docs/guides/cli/config
+
+[db]
+# Port to use for local PostgreSQL (when running supabase start)
+port = 54321
+# Shadow database port
+shadow_port = 54322
+# Major version of PostgreSQL to use
+major_version = 15
+
+[api]
+# Port for local API (when running supabase start)
+port = 54323
+# Max number of rows to return (0 = no limit)
+max_rows = 1000
+
+[auth]
+# Increase if you need longer token expiration times
+enable_signup = true
+enable_confirmations = true
+
+[realtime]
+# Enable realtime subscriptions
+enabled = true
+
+# Uncomment to enable Log Replay
+# [logs]
+# vector_tail_window_ms = 100

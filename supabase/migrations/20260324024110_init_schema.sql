@@ -6,7 +6,7 @@
 -- to prevent oversells during high-concurrency events.
 --
 -- Three-Layer Protection:
--- 1. Atomic Increments: committed_quantity updates prevented race conditions
+-- 1. Atomic Increments: committed_quantity updates prevents race conditions
 -- 2. Safety Buffering: safety_floor_quantity hides stock from Shopify during latency
 -- 3. Flash Mode: manual toggle to pause API syncs during peak surges
 
