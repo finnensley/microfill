@@ -20,10 +20,10 @@ export async function POST(req: Request) {
   }
 
   const supabase = createServerSupabaseClient();
-  const { data: inventoryTenant, error: tenantLookupError } = await supabase
-    .from("inventory_items")
-    .select("tenant_id")
-    .eq("tenant_id", tenantId)
+  const { data: tenant, error: tenantLookupError } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("id", tenantId)
     .limit(1)
     .maybeSingle();
 
@@ -34,9 +34,9 @@ export async function POST(req: Request) {
     );
   }
 
-  if (!inventoryTenant) {
+  if (!tenant) {
     return NextResponse.json(
-      { error: "Selected tenant does not exist in inventory data." },
+      { error: "Selected tenant does not exist." },
       { status: 404 },
     );
   }

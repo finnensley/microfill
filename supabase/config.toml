@@ -31,6 +31,15 @@ port = 54325
 [auth]
 # Increase if you need longer token expiration times
 enable_signup = true
+site_url = "http://localhost:3000/auth/callback"
+additional_redirect_urls = [
+	"http://localhost:3000/**",
+	"http://127.0.0.1:3000/**",
+]
+
+[auth.email.template.magic_link]
+subject = "Your sign-in link"
+content_path = "./supabase/templates/magic-link.html"
 
 [realtime]
 # Enable realtime subscriptions

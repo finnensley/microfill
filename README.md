@@ -67,6 +67,7 @@ MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" a
   - `/dashboard` is protected by middleware and redirects to `/login` when no session is present.
   - `/onboarding` explicitly assigns a tenant to the current user when no assignment exists yet.
   - Inventory reads resolve the tenant on the server from `app_metadata.tenant_id`, then from `user_tenant_assignments`.
+  - Tenant choices come from the `tenants` table, not from inventory records.
 
 - Legal & Licensing
   Property of soloSoftwareDev LLC. All rights reserved.

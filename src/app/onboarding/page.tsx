@@ -17,25 +17,18 @@ export default async function OnboardingPage() {
 
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
-    .from("inventory_items")
-    .select("tenant_id, sku, shopify_product_id")
-    .order("tenant_id", { ascending: true });
+    .from("tenants")
+    .select("id, name, slug")
+    .order("name", { ascending: true });
 
   if (error) {
     throw new Error(`Unable to load tenant options: ${error.message}`);
   }
 
-  const tenantOptions = Array.from(
-    new Map(
-      (data ?? []).map((item) => [
-        item.tenant_id,
-        {
-          tenantId: item.tenant_id,
-          label: `${item.tenant_id} (${item.sku || item.shopify_product_id})`,
-        },
-      ]),
-    ).values(),
-  );
+  const tenantOptions = (data ?? []).map((tenant) => ({
+    tenantId: tenant.id,
+    label: tenant.slug ? `${tenant.name} (${tenant.slug})` : tenant.name,
+  }));
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-12">

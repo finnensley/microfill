@@ -17,9 +17,12 @@ export function LoginForm() {
     setSubmitting(true);
     setStatus("");
 
+    const emailRedirectTo = `${window.location.origin}/auth/callback?next=/dashboard`;
+
     const { error } = await supabaseBrowser.auth.signInWithOtp({
       email,
       options: {
+        emailRedirectTo,
         shouldCreateUser: true,
       },
     });
@@ -32,7 +35,9 @@ export function LoginForm() {
     }
 
     setStep("verify");
-    setStatus("Check your email for the one-time code, then enter it below.");
+    setStatus(
+      "Check your email. Click the sign-in link to continue immediately, or paste the one-time code below instead.",
+    );
   };
 
   const handleVerifyOtp = async (event: FormEvent<HTMLFormElement>) => {
@@ -61,8 +66,10 @@ export function LoginForm() {
     <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-8 text-white shadow-xl">
       <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Use email OTP for local auth testing. Protected routes will redirect
-        here when no session is present.
+        Use email sign-in for local auth testing. Protected routes will redirect
+        here when no session is present. The link in the email signs you in
+        directly. The one-time code below is a fallback if you prefer to paste
+        it manually.
       </p>
 
       <form
@@ -112,7 +119,7 @@ export function LoginForm() {
           {submitting
             ? "Working..."
             : step === "request"
-              ? "Send sign-in code"
+              ? "Email me a sign-in link"
               : "Verify and continue"}
         </button>
       </form>

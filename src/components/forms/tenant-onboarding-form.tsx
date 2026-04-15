@@ -94,6 +94,13 @@ export function TenantOnboardingForm({
           </select>
         </div>
 
+        {tenantOptions.length === 0 ? (
+          <p className="text-sm text-rose-700">
+            No tenants are available yet. Seed a tenant first, then return to
+            onboarding.
+          </p>
+        ) : null}
+
         <button
           type="submit"
           disabled={submitting || !tenantId}
