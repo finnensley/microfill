@@ -1,12 +1,23 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
-import { supabase } from "@/lib/supabase-client";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { getShopifyWebhookSecret } from "@/lib/supabase-config";
 
-// Your Shopify Webhook Secret from Shopify Admin Settings
-const SHOPIFY_WEBHOOK_SECRET = process.env.SHOPIFY_WEBHOOK_SECRET!;
+type ShopifyWebhookLineItem = {
+  quantity: number;
+  variant_id: number | string;
+};
+
+type ShopifyWebhookOrder = {
+  id: number | string;
+  line_items?: ShopifyWebhookLineItem[];
+};
 
 export async function POST(req: Request) {
   try {
+    const supabase = createServerSupabaseClient();
+    const shopifyWebhookSecret = getShopifyWebhookSecret();
+
     // 1. Extract tenant_id from Shopify shop ID (multi-tenancy support)
     const shopId = req.headers.get("x-shopify-shop-id");
     if (!shopId) {
@@ -28,7 +39,7 @@ export async function POST(req: Request) {
     }
 
     const generatedHash = crypto
-      .createHmac("sha256", SHOPIFY_WEBHOOK_SECRET)
+      .createHmac("sha256", shopifyWebhookSecret)
       .update(rawBody, "utf8")
       .digest("base64");
 
@@ -39,7 +50,7 @@ export async function POST(req: Request) {
     }
 
     // 5. If valid, parse the JSON and update inventory
-    const body = JSON.parse(rawBody);
+    const body = JSON.parse(rawBody) as ShopifyWebhookOrder;
     const { line_items, id: orderId } = body;
 
     if (!line_items || line_items.length === 0) {

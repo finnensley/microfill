@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { getShipHeroWebhookSecret } from "@/lib/supabase-config";
 import { ShipHeroPOUpdate, ShipHeroShipmentUpdate } from "@/types/shiphero";
 import {
   processSyncEventsBatch,
   InventoryEvent,
 } from "@/services/inventory-sync";
-
-// ShipHero Webhook Secret from ShipHero Dashboard
-const SHIPHERO_WEBHOOK_SECRET = process.env.SHIPHERO_WEBHOOK_SECRET!;
 
 /**
  * ShipHero Webhook Handler
@@ -17,6 +15,8 @@ const SHIPHERO_WEBHOOK_SECRET = process.env.SHIPHERO_WEBHOOK_SECRET!;
  */
 export async function POST(req: Request) {
   try {
+    const shipHeroWebhookSecret = getShipHeroWebhookSecret();
+
     // 1. Extract tenant_id from header (for multi-tenancy support)
     // ShipHero webhooks should include X-Shopify-Shop-ID or custom tenant identifier
     const tenantId =
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const generatedHash = crypto
-      .createHmac("sha256", SHIPHERO_WEBHOOK_SECRET)
+      .createHmac("sha256", shipHeroWebhookSecret)
       .update(rawBody, "utf8")
       .digest("base64");
 

@@ -1,0 +1,32 @@
+const missingEnvMessage =
+  'Missing Supabase environment variables. For local Docker development, run "npm run supabase:start", then "npm run supabase:env" and copy the printed values into .env.local.';
+
+function requireEnv(name: string) {
+  const value = process.env[name];
+
+  if (!value) {
+    throw new Error(missingEnvMessage);
+  }
+
+  return value;
+}
+
+export function getSupabaseUrl() {
+  return requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+}
+
+export function getSupabaseAnonKey() {
+  return requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+}
+
+export function getSupabaseServiceRoleKey() {
+  return requireEnv("SUPABASE_SERVICE_ROLE_KEY");
+}
+
+export function getShopifyWebhookSecret() {
+  return requireEnv("SHOPIFY_WEBHOOK_SECRET");
+}
+
+export function getShipHeroWebhookSecret() {
+  return requireEnv("SHIPHERO_WEBHOOK_SECRET");
+}

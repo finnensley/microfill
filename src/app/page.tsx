@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { supabaseBrowser } from "@/lib/supabase-browser";
 
 export default function LandingPage() {
   const [email, setEmail] = useState("");
@@ -9,9 +9,16 @@ export default function LandingPage() {
 
   const handleSubscribe = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const { error } = await supabase.from("leads").insert([{ email }]);
-    if (error) setStatus("Error joining list.");
-    else setStatus("You’re on the list! We’ll reach out for the pilot.");
+
+    const { error } = await supabaseBrowser.from("leads").insert([{ email }]);
+
+    if (error) {
+      setStatus(`Error joining list: ${error.message}`);
+      return;
+    }
+
+    setEmail("");
+    setStatus("You’re on the list! We’ll reach out for the pilot.");
   };
 
   return (

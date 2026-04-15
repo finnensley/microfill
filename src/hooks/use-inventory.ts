@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase-client";
+import { useCallback, useEffect, useState } from "react";
+import { supabaseBrowser } from "../lib/supabase-browser";
 import { InventoryItem } from "@/types/inventory";
 
 /**
@@ -13,10 +13,10 @@ export function useInventory(tenantId?: string) {
   const [error, setError] = useState<string | null>(null);
 
   // 1. Initial Fetch
-  const fetchInventory = async () => {
+  const fetchInventory = useCallback(async () => {
     try {
       setLoading(true);
-      let query = supabase.from("inventory_items").select("*");
+      let query = supabaseBrowser.from("inventory_items").select("*");
 
       if (tenantId) {
         query = query.eq("tenant_id", tenantId);
@@ -33,7 +33,7 @@ export function useInventory(tenantId?: string) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [tenantId]);
 
   // 2. Real-time Subscription
   useEffect(() => {
@@ -51,7 +51,7 @@ export function useInventory(tenantId?: string) {
     return () => {
       // Cleanup
     };
-  }, [tenantId]);
+  }, [fetchInventory]);
 
   return { items, loading, error, refresh: fetchInventory };
 }

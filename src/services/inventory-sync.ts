@@ -1,4 +1,6 @@
-import { supabase } from "@/lib/supabase-client";
+import "server-only";
+
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 
 /**
  * Normalized inventory event - works for ANY WMS
@@ -14,6 +16,18 @@ export interface InventoryEvent {
   timestamp?: Date;
 }
 
+type ReceivingRpcArgs = {
+  qty_received: number;
+  sku_input: string;
+  tenant_id_input: string;
+};
+
+type ShipmentRpcArgs = {
+  qty_shipped: number;
+  sku_input: string;
+  tenant_id_input: string;
+};
+
 /**
  * Process normalized inventory events
  * Single source of truth for inventory sync logic
@@ -25,12 +39,18 @@ export async function processSyncEvent(
   event: InventoryEvent,
 ): Promise<boolean> {
   try {
+    const supabase = createServerSupabaseClient();
+
     if (event.type === "stock_received") {
-      const { error } = await supabase.rpc("sync_shiphero_receiving", {
+      const receivingArgs: ReceivingRpcArgs = {
         tenant_id_input: event.tenantId,
         sku_input: event.sku,
         qty_received: event.quantity,
-      });
+      };
+      const { error } = await supabase.rpc(
+        "sync_shiphero_receiving",
+        receivingArgs,
+      );
 
       if (error) {
         console.error(
@@ -47,11 +67,15 @@ export async function processSyncEvent(
     }
 
     if (event.type === "stock_shipped") {
-      const { error } = await supabase.rpc("sync_shiphero_shipment", {
+      const shipmentArgs: ShipmentRpcArgs = {
         tenant_id_input: event.tenantId,
         sku_input: event.sku,
         qty_shipped: event.quantity,
-      });
+      };
+      const { error } = await supabase.rpc(
+        "sync_shiphero_shipment",
+        shipmentArgs,
+      );
 
       if (error) {
         console.error(
