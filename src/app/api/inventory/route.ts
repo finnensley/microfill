@@ -12,13 +12,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const resolvedTenantId = getTenantIdForUser(user);
+  const resolvedTenantId = await getTenantIdForUser(user);
 
   if (!resolvedTenantId) {
     return NextResponse.json(
       {
         error:
-          "No tenant is configured for this user. Add app_metadata.tenant_id or set DEFAULT_TENANT_ID for local development.",
+          "No tenant is configured for this user. Complete onboarding or assign app_metadata.tenant_id for the user.",
       },
       { status: 409 },
     );

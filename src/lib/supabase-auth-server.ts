@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { User } from "@supabase/supabase-js";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase-config";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Database } from "@/types/supabase";
 
 export async function createServerAuthClient() {
@@ -47,7 +48,7 @@ export async function requireAuthenticatedUser() {
   return user;
 }
 
-export function getTenantIdForUser(user: User) {
+function getTenantIdFromMetadata(user: User) {
   const tenantIdFromMetadata = user.app_metadata?.tenant_id;
 
   if (
@@ -57,10 +58,35 @@ export function getTenantIdForUser(user: User) {
     return tenantIdFromMetadata;
   }
 
-  const defaultTenantId = process.env.DEFAULT_TENANT_ID;
+  return null;
+}
 
-  if (defaultTenantId) {
-    return defaultTenantId;
+async function getTenantIdFromAssignment(user: User) {
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from("user_tenant_assignments")
+    .select("tenant_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Unable to resolve tenant assignment: ${error.message}`);
+  }
+
+  return data?.tenant_id ?? null;
+}
+
+export async function getTenantIdForUser(user: User) {
+  const metadataTenantId = getTenantIdFromMetadata(user);
+
+  if (metadataTenantId) {
+    return metadataTenantId;
+  }
+
+  const assignedTenantId = await getTenantIdFromAssignment(user);
+
+  if (assignedTenantId) {
+    return assignedTenantId;
   }
 
   return null;
@@ -69,4 +95,8 @@ export function getTenantIdForUser(user: User) {
 export async function getCurrentTenantId() {
   const user = await requireAuthenticatedUser();
   return getTenantIdForUser(user);
+}
+
+export function getDefaultTenantId() {
+  return process.env.DEFAULT_TENANT_ID ?? null;
 }

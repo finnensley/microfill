@@ -16,7 +16,7 @@ export function useInventory(tenantId?: string) {
     if (!tenantId) {
       setItems([]);
       setError(
-        "No tenant is configured for this account yet. Set DEFAULT_TENANT_ID locally or assign app_metadata.tenant_id to the user.",
+        "No tenant is configured for this account yet. Complete onboarding or assign app_metadata.tenant_id for the user.",
       );
       setLoading(false);
       return;
@@ -24,8 +24,11 @@ export function useInventory(tenantId?: string) {
 
     try {
       setLoading(true);
-      const response = await fetch(`/api/inventory?tenantId=${tenantId}`);
-      const payload = (await response.json()) as {
+      const response = await fetch(
+        `/api/inventory?tenantId=${encodeURIComponent(tenantId)}`,
+      );
+      const responseText = await response.text();
+      const payload = (responseText ? JSON.parse(responseText) : {}) as {
         error?: string;
         items?: InventoryItem[];
       };

@@ -1,4 +1,5 @@
 import InventoryDashboard from "@/components/ui/dashboard";
+import { redirect } from "next/navigation";
 import {
   getTenantIdForUser,
   requireAuthenticatedUser,
@@ -6,7 +7,11 @@ import {
 
 export default async function DashboardPage() {
   const user = await requireAuthenticatedUser();
-  const tenantId = getTenantIdForUser(user);
+  const tenantId = await getTenantIdForUser(user);
+
+  if (!tenantId) {
+    redirect("/onboarding");
+  }
 
   return (
     <main className="min-h-screen bg-slate-100 px-6 py-10 text-slate-950">
@@ -19,9 +24,7 @@ export default async function DashboardPage() {
             Inventory Overview
           </h1>
           <p className="text-sm text-slate-600">Signed in as {user.email}</p>
-          <p className="text-sm text-slate-600">
-            Tenant: {tenantId || "Not configured"}
-          </p>
+          <p className="text-sm text-slate-600">Tenant: {tenantId}</p>
         </header>
 
         <InventoryDashboard tenantId={tenantId} />
