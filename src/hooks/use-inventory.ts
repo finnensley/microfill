@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { supabaseBrowser } from "../lib/supabase-browser";
 import { InventoryItem } from "@/types/inventory";
 
 /**
@@ -14,18 +13,28 @@ export function useInventory(tenantId?: string) {
 
   // 1. Initial Fetch
   const fetchInventory = useCallback(async () => {
+    if (!tenantId) {
+      setItems([]);
+      setError(
+        "No tenant is configured for this account yet. Set DEFAULT_TENANT_ID locally or assign app_metadata.tenant_id to the user.",
+      );
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
-      let query = supabaseBrowser.from("inventory_items").select("*");
+      const response = await fetch(`/api/inventory?tenantId=${tenantId}`);
+      const payload = (await response.json()) as {
+        error?: string;
+        items?: InventoryItem[];
+      };
 
-      if (tenantId) {
-        query = query.eq("tenant_id", tenantId);
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to load inventory");
       }
 
-      const { data, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
-
-      setItems((data || []) as InventoryItem[]);
+      setItems(payload.items || []);
       setError(null);
     } catch (err) {
       console.error("Error fetching inventory:", err);

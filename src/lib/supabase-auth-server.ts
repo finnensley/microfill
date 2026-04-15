@@ -3,6 +3,7 @@ import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { User } from "@supabase/supabase-js";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase-config";
 import { Database } from "@/types/supabase";
 
@@ -44,4 +45,28 @@ export async function requireAuthenticatedUser() {
   }
 
   return user;
+}
+
+export function getTenantIdForUser(user: User) {
+  const tenantIdFromMetadata = user.app_metadata?.tenant_id;
+
+  if (
+    typeof tenantIdFromMetadata === "string" &&
+    tenantIdFromMetadata.length > 0
+  ) {
+    return tenantIdFromMetadata;
+  }
+
+  const defaultTenantId = process.env.DEFAULT_TENANT_ID;
+
+  if (defaultTenantId) {
+    return defaultTenantId;
+  }
+
+  return null;
+}
+
+export async function getCurrentTenantId() {
+  const user = await requireAuthenticatedUser();
+  return getTenantIdForUser(user);
 }

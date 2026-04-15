@@ -42,12 +42,11 @@ MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" a
   4. Print the local environment values: npm run supabase:env
 
   5. Copy .env.example to .env.local and paste the generated NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY values.
+     Keep `DEFAULT_TENANT_ID` pointed at the seeded tenant for local dashboard development unless you have real tenant metadata wired into auth.
 
   6. Reset and seed the local database from migrations: npm run supabase:reset
 
-  6a. Regenerate typed database definitions after schema changes: npm run supabase:types
-  7. Run the app: npm run dev
-
+  6a. Regenerate typed database definitions after schema changes: npm run supabase:types 7. Run the app: npm run dev
   8. Only use a tunnel for webhook testing against real Shopify or ShipHero callbacks. Day-to-day UI and database work should stay local.
 
   While the hosted Supabase project is paused, local Docker-backed Supabase is the default development workflow for this repository.
@@ -67,6 +66,7 @@ MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" a
 - Local Auth Flow
   - `/login` uses Supabase email OTP for local auth testing.
   - `/dashboard` is protected by middleware and redirects to `/login` when no session is present.
+  - Inventory reads resolve the tenant on the server from `app_metadata.tenant_id`, then fall back to `DEFAULT_TENANT_ID` for local seeded development.
 
 - Legal & Licensing
   Property of soloSoftwareDev LLC. All rights reserved.

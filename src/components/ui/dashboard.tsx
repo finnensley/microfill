@@ -1,10 +1,33 @@
 "use client";
 import { useInventory } from "@/hooks/use-inventory";
 
-export default function InventoryDashboard() {
-  const { items, loading } = useInventory();
+interface InventoryDashboardProps {
+  tenantId: string | null;
+}
+
+export default function InventoryDashboard({
+  tenantId,
+}: InventoryDashboardProps) {
+  const { items, loading, error } = useInventory(tenantId || undefined);
 
   if (loading) return <p>Loading Warehouse Data...</p>;
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+        <p className="font-semibold">Inventory unavailable</p>
+        <p className="mt-1 text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  if (items.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-slate-700">
+        No inventory records found for tenant {tenantId}.
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
