@@ -1,6 +1,9 @@
 const missingEnvMessage =
   'Missing Supabase environment variables. For local Docker development, run "npm run supabase:start", then "npm run supabase:env" and copy the printed values into .env.local.';
 
+const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+const publicSupabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
 function requireEnv(name: string) {
   const value = process.env[name];
 
@@ -12,11 +15,19 @@ function requireEnv(name: string) {
 }
 
 export function getSupabaseUrl() {
-  return requireEnv("NEXT_PUBLIC_SUPABASE_URL");
+  if (!publicSupabaseUrl) {
+    throw new Error(missingEnvMessage);
+  }
+
+  return publicSupabaseUrl;
 }
 
 export function getSupabaseAnonKey() {
-  return requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!publicSupabaseAnonKey) {
+    throw new Error(missingEnvMessage);
+  }
+
+  return publicSupabaseAnonKey;
 }
 
 export function getSupabaseServiceRoleKey() {

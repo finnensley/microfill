@@ -45,6 +45,7 @@ MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" a
 
   6. Reset and seed the local database from migrations: npm run supabase:reset
 
+  6a. Regenerate typed database definitions after schema changes: npm run supabase:types
   7. Run the app: npm run dev
 
   8. Only use a tunnel for webhook testing against real Shopify or ShipHero callbacks. Day-to-day UI and database work should stay local.
@@ -59,8 +60,13 @@ MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" a
 - Recommended Development Loop
   - Build UI, hooks, and database logic against the local Supabase stack.
   - Use the seeded local data for normal dashboard and landing-page development.
+  - Regenerate `src/types/supabase.ts` after adding or changing tables/functions.
   - Test webhook handlers locally with saved payloads first.
   - Introduce ngrok or a similar tunnel only when validating live third-party webhook delivery.
+
+- Local Auth Flow
+  - `/login` uses Supabase email OTP for local auth testing.
+  - `/dashboard` is protected by middleware and redirects to `/login` when no session is present.
 
 - Legal & Licensing
   Property of soloSoftwareDev LLC. All rights reserved.
