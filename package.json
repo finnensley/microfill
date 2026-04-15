@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "supabase:start": "npx supabase start",
+    "supabase:stop": "npx supabase stop",
+    "supabase:status": "npx supabase status",
+    "supabase:env": "npx supabase status -o env",
+    "supabase:reset": "npx supabase db reset"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.98.0",

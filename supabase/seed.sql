@@ -1,0 +1,41 @@
+INSERT INTO inventory_items (
+  id,
+  tenant_id,
+  shopify_product_id,
+  shopify_variant_id,
+  sku,
+  total_quantity,
+  committed_quantity,
+  safety_floor_percent,
+  safety_floor_quantity,
+  flash_mode_enabled,
+  last_synced_at
+)
+VALUES
+  (
+    '00000000-0000-0000-0000-000000000101',
+    '10000000-0000-0000-0000-000000000001',
+    'shopify-product-101',
+    'shopify-variant-101',
+    'SKU-DEMO-RED',
+    120,
+    4,
+    10,
+    12,
+    false,
+    NOW()
+  ),
+  (
+    '00000000-0000-0000-0000-000000000102',
+    '10000000-0000-0000-0000-000000000001',
+    'shopify-product-102',
+    'shopify-variant-102',
+    'SKU-DEMO-BLUE',
+    48,
+    2,
+    10,
+    5,
+    false,
+    NOW()
+  )
+ON CONFLICT (id) DO NOTHING;

@@ -9,11 +9,24 @@ shadow_port = 54322
 # Major version of PostgreSQL to use
 major_version = 15
 
+[db.seed]
+# Seed local development data after migrations are applied
+enabled = true
+sql_paths = ["./seed.sql"]
+
 [api]
 # Port for local API (when running supabase start)
 port = 54323
 # Max number of rows to return (0 = no limit)
 max_rows = 1000
+
+[studio]
+# Supabase Studio UI must use a different port than the local API gateway
+port = 54324
+
+[inbucket]
+# Local email testing UI
+port = 54325
 
 [auth]
 # Increase if you need longer token expiration times

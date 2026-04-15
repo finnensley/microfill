@@ -1,10 +1,10 @@
 MicroFill: High-Concurrency Inventory Engine
 By soloSoftwareDev LLC
 
-  MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" and prevent oversells during high-traffic Shopify launches ($1M+ events). Unlike traditional middleware, MicroFill utilizes Atomic SQL buffering to handle race conditions that break standard API-based sync tools.
+MicroFill is a specialized Micro-SaaS designed to eliminate "Shadow Inventory" and prevent oversells during high-traffic Shopify launches ($1M+ events). Unlike traditional middleware, MicroFill utilizes Atomic SQL buffering to handle race conditions that break standard API-based sync tools.
 
 - Core Architecture
-  - Framework: Next.js 15 (App Router, TypeScript, Tailwind)
+  - Framework: Next.js 16 (App Router, TypeScript, Tailwind)
 
   - Database: PostgreSQL (Supabase) with PL/pgSQL Atomic Functions
 
@@ -16,17 +16,16 @@ By soloSoftwareDev LLC
 
 - Project Structure
   /src
-   ├── app/api/webhooks  # HMAC-verified Shopify entry points
-   ├── components/ui     # Atomic Shadcn components
-   ├── hooks/            # useInventory (Real-time DB subscriptions)
-   ├── lib/              # Supabase & Stripe singleton clients
-   ├── services/         # Shopify Admin API wrappers
-   └── types/            # Strict TypeScript inventory interfaces
+  ├── app/api/webhooks # HMAC-verified Shopify entry points
+  ├── components/ui # Atomic Shadcn components
+  ├── hooks/ # useInventory (Real-time DB subscriptions)
+  ├── lib/ # Supabase & Stripe singleton clients
+  ├── services/ # Shopify Admin API wrappers
+  └── types/ # Strict TypeScript inventory interfaces
 
 - The "Triple-Sync" Fail-Safe
 
   MicroFill solves the Race Condition problem through three layers of protection:
-
   1. Atomic Increments: We use rpc calls to increment committed_quantity directly in the DB engine, preventing "Read-Modify-Write" data loss.
 
   2. Safety Buffering: A user-defined "Safety Floor" hides the last 5-10% of stock from Shopify to absorb API latency.
@@ -34,15 +33,35 @@ By soloSoftwareDev LLC
   3. Flash Mode: A manual toggle that pauses outgoing API updates during peak surges to let Shopify's native engine handle the "Heat," followed by a one-click reconciliation.
 
 - Development Setup
-  1. Environment: Copy .env.example to .env.local and add your SUPABASE_SERVICE_ROLE_KEY and SHOPIFY_WEBHOOK_SECRET.
-  
-  2. Database: Run the migrations in /supabase/migrations to set up the inventory_items table and the check_inventory_threshold trigger.
+  1. Install Docker Desktop and the Supabase CLI.
 
-  3. Install: npm install
+  2. Install dependencies: npm install
 
-  4. Dev: npm run dev
+  3. Start the local Supabase stack: npm run supabase:start
+
+  4. Print the local environment values: npm run supabase:env
+
+  5. Copy .env.example to .env.local and paste the generated NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY values.
+
+  6. Reset and seed the local database from migrations: npm run supabase:reset
+
+  7. Run the app: npm run dev
+
+  8. Only use a tunnel for webhook testing against real Shopify or ShipHero callbacks. Day-to-day UI and database work should stay local.
+
+  While the hosted Supabase project is paused, local Docker-backed Supabase is the default development workflow for this repository.
+
+  Local port map for this repo:
+  - Supabase API: http://127.0.0.1:54323
+  - Supabase Studio: http://127.0.0.1:54324
+  - Inbucket: http://127.0.0.1:54325
+
+- Recommended Development Loop
+  - Build UI, hooks, and database logic against the local Supabase stack.
+  - Use the seeded local data for normal dashboard and landing-page development.
+  - Test webhook handlers locally with saved payloads first.
+  - Introduce ngrok or a similar tunnel only when validating live third-party webhook delivery.
 
 - Legal & Licensing
-Property of soloSoftwareDev LLC. All rights reserved.
-Unauthorized copying of the "Atomic Buffering" logic is strictly prohibited.
-
+  Property of soloSoftwareDev LLC. All rights reserved.
+  Unauthorized copying of the "Atomic Buffering" logic is strictly prohibited.
