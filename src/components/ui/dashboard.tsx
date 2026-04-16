@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInventory } from "@/hooks/use-inventory";
 import { InventoryAuditEntry, InventoryItem } from "@/types/inventory";
 
@@ -105,7 +105,7 @@ export default function InventoryDashboard({
     });
   }, [items]);
 
-  async function refreshAuditHistory() {
+  const refreshAuditHistory = useCallback(async () => {
     if (!tenantId) {
       setAuditHistory([]);
       setAuditError(
@@ -142,11 +142,11 @@ export default function InventoryDashboard({
     } finally {
       setAuditLoading(false);
     }
-  }
+  }, [tenantId]);
 
   useEffect(() => {
     void refreshAuditHistory();
-  }, [tenantId]);
+  }, [refreshAuditHistory]);
 
   const filteredItems = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
