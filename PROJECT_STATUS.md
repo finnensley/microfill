@@ -59,6 +59,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Shared inventory sync/service structure exists for incoming warehouse events
 - Webhook handlers can now resolve tenant-scoped integration configuration with env fallback
 - Recorded Shopify replay tooling now exists for local webhook validation
+- Shopify live-validation helper now exists to sync tenant config and print tunnel/store setup details
 - Recorded ShipHero replay tooling now exists for PO receipt and shipment validation
 
 ## What Is Not Done
@@ -72,7 +73,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 ### Secondary Gaps
 
 - No webhook retry/dead-letter path yet
-- No test suite yet
+- No browser or database-backed end-to-end suite yet
 - No production deployment plan yet
 
 ## Current Build Priorities
@@ -96,7 +97,7 @@ Why this is first:
 
 ### Priority 2: Finish Shopify Inbound Flow
 
-**Status:** Recorded payload replay now succeeds locally and verifies inventory plus audit-log side effects. Live Shopify delivery is still pending.
+**Status:** Recorded payload replay now succeeds locally and verifies inventory plus audit-log side effects. A tunnel-ready live-validation helper is in place, but live Shopify delivery is still pending.
 
 **Goal:** Accept a real Shopify event and push it through the local inventory path safely.
 
@@ -106,6 +107,7 @@ Deliverables:
 - [x] Validate signature handling with recorded payload replay
 - [x] Add structured logging around webhook success/failure
 - [x] Add local replay tooling and demo integration seed support
+- [x] Add tunnel-ready live validation helper and runbook
 - [ ] Validate delivery from a live Shopify store or tunnel
 
 Definition of done:

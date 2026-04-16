@@ -15,6 +15,7 @@
     "supabase:reset": "npx supabase db reset",
     "supabase:types": "npx supabase gen types typescript --local --schema public > src/types/supabase.ts",
     "webhook:replay:shopify": "node scripts/replay-shopify-order.mjs",
+    "webhook:shopify:live:prepare": "node scripts/prepare-shopify-live-validation.mjs",
     "webhook:replay:shiphero:po": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/po-update.json",
     "webhook:replay:shiphero:shipment": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/shipment-update.json"
   },

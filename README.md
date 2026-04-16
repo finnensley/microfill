@@ -153,6 +153,23 @@ npm test
 - Replay the saved ShipHero PO and shipment fixtures with `npm run webhook:replay:shiphero:po` and `npm run webhook:replay:shiphero:shipment`.
 - Introduce ngrok or a similar tunnel only when validating real third-party webhook delivery.
 
+## Live Shopify Validation
+
+Use this only when the app is already running locally and a public HTTPS tunnel is forwarding to `http://localhost:3000`.
+
+1. Set the live-validation variables in `.env.local`:
+   `SHOPIFY_LIVE_SHOP_DOMAIN`, `SHOPIFY_LIVE_SHOP_ID` if needed, `SHOPIFY_TUNNEL_URL`, and a non-empty `SHOPIFY_WEBHOOK_SECRET`.
+2. Prepare the tenant-scoped Shopify integration and print the exact webhook target plus seeded variant IDs:
+
+```bash
+npm run webhook:shopify:live:prepare
+```
+
+3. If you want to smoke-test the public tunnel before touching Shopify, set `SHOPIFY_LIVE_SMOKE_TEST=true` and rerun the same command.
+4. In Shopify admin, create or update the `orders/create` webhook so it points at `https://your-tunnel-host/api/webhooks/shopify` and uses the same secret as `SHOPIFY_WEBHOOK_SECRET`.
+5. Place a test order containing one of the seeded variant IDs printed by the prepare script.
+6. Verify the result in the dashboard, then confirm database and audit-log changes with the SQL commands printed by the script.
+
 ## Current Local Auth Flow
 
 - `/login` supports email sign-in for local development.
