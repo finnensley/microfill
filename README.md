@@ -157,18 +157,35 @@ npm test
 
 Use this only when the app is already running locally and a public HTTPS tunnel is forwarding to `http://localhost:3000`.
 
-1. Set the live-validation variables in `.env.local`:
-   `SHOPIFY_LIVE_SHOP_DOMAIN`, `SHOPIFY_LIVE_SHOP_ID` if needed, `SHOPIFY_TUNNEL_URL`, and a non-empty `SHOPIFY_WEBHOOK_SECRET`.
-2. Prepare the tenant-scoped Shopify integration and print the exact webhook target plus seeded variant IDs:
+1. Start the app locally:
+
+```bash
+npm run dev
+```
+
+2. Start a public HTTPS tunnel to `localhost:3000`:
+
+```bash
+npm run tunnel:shopify
+```
+
+3. Copy the generated `https://...loca.lt` URL into `SHOPIFY_TUNNEL_URL` in `.env.local`.
+4. Set or confirm the live-validation values in `.env.local`:
+   `SHOPIFY_LIVE_SHOP_DOMAIN=microfill-2.myshopify.com`, `SHOPIFY_LIVE_SHOP_ID=microfill-2`, `SHOPIFY_TUNNEL_URL`, and a non-empty `SHOPIFY_WEBHOOK_SECRET`.
+5. Map the local validation SKUs to real Shopify product and variant IDs from your development store:
+   `SHOPIFY_LIVE_PRODUCT_BLUE_ID`, `SHOPIFY_LIVE_VARIANT_BLUE_ID`, `SHOPIFY_LIVE_PRODUCT_RED_ID`, and `SHOPIFY_LIVE_VARIANT_RED_ID`.
+6. Prepare the tenant-scoped Shopify integration and print the exact webhook target plus seeded variant IDs:
 
 ```bash
 npm run webhook:shopify:live:prepare
 ```
 
-3. If you want to smoke-test the public tunnel before touching Shopify, set `SHOPIFY_LIVE_SMOKE_TEST=true` and rerun the same command.
-4. In Shopify admin, create or update the `orders/create` webhook so it points at `https://your-tunnel-host/api/webhooks/shopify` and uses the same secret as `SHOPIFY_WEBHOOK_SECRET`.
-5. Place a test order containing one of the seeded variant IDs printed by the prepare script.
-6. Verify the result in the dashboard, then confirm database and audit-log changes with the SQL commands printed by the script.
+7. If you want to smoke-test the public tunnel before touching Shopify, set `SHOPIFY_LIVE_SMOKE_TEST=true` and rerun the same command.
+8. In Shopify admin for `microfill-2.myshopify.com`, create or update the `orders/create` webhook so it points at `https://your-tunnel-host/api/webhooks/shopify` and uses the same secret as `SHOPIFY_WEBHOOK_SECRET`.
+9. Place a test order containing one of the mapped Shopify variants printed by the prepare script.
+10. Verify the result in the dashboard, then confirm database and audit-log changes with the SQL commands printed by the script.
+
+The real-ID mapping matters because the local webhook handler matches incoming Shopify line items by `shopify_variant_id`. The seeded demo IDs are placeholders until you replace them with actual IDs from `microfill-2.myshopify.com`.
 
 ## Current Local Auth Flow
 

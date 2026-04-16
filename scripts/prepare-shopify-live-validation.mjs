@@ -76,6 +76,30 @@ function parseBoolean(value) {
   return value === "1" || value === "true" || value === "yes";
 }
 
+function buildInventoryOverride(label, defaultSku) {
+  const normalizedLabel = label.toUpperCase();
+  const sku = getConfig(`SHOPIFY_LIVE_SKU_${normalizedLabel}`, defaultSku);
+  const productId = getConfig(`SHOPIFY_LIVE_PRODUCT_${normalizedLabel}_ID`);
+  const variantId = getConfig(`SHOPIFY_LIVE_VARIANT_${normalizedLabel}_ID`);
+
+  if (!productId && !variantId) {
+    return null;
+  }
+
+  if (!productId || !variantId) {
+    throw new Error(
+      `Both SHOPIFY_LIVE_PRODUCT_${normalizedLabel}_ID and SHOPIFY_LIVE_VARIANT_${normalizedLabel}_ID are required when overriding live inventory mappings.`,
+    );
+  }
+
+  return {
+    label: normalizedLabel,
+    productId: productId.trim(),
+    sku,
+    variantId: variantId.trim(),
+  };
+}
+
 const supabaseUrl = requireConfig("NEXT_PUBLIC_SUPABASE_URL");
 const serviceRoleKey = requireConfig("SUPABASE_SERVICE_ROLE_KEY");
 const tenantId = getConfig(
@@ -98,6 +122,10 @@ const webhookTopic = getConfig("SHOPIFY_LIVE_WEBHOOK_TOPIC", "orders/create");
 const shouldSmokeTest = parseBoolean(
   getConfig("SHOPIFY_LIVE_SMOKE_TEST", "false").toLowerCase(),
 );
+const inventoryOverrides = [
+  buildInventoryOverride("blue", "SKU-DEMO-BLUE"),
+  buildInventoryOverride("red", "SKU-DEMO-RED"),
+].filter(Boolean);
 
 async function supabaseRest(pathname, options = {}) {
   const response = await fetch(`${supabaseUrl}/rest/v1/${pathname}`, {
@@ -145,6 +173,31 @@ async function syncLiveIntegration() {
   });
 }
 
+async function syncLiveInventoryMappings() {
+  const syncedOverrides = [];
+
+  for (const override of inventoryOverrides) {
+    await supabaseRest(
+      `inventory_items?tenant_id=eq.${encodeURIComponent(tenantId)}&sku=eq.${encodeURIComponent(override.sku)}`,
+      {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          prefer: "return=minimal",
+        },
+        body: JSON.stringify({
+          shopify_product_id: override.productId,
+          shopify_variant_id: override.variantId,
+        }),
+      },
+    );
+
+    syncedOverrides.push(override);
+  }
+
+  return syncedOverrides;
+}
+
 async function fetchTenantInventoryMappings() {
   const response = await supabaseRest(
     `inventory_items?tenant_id=eq.${encodeURIComponent(tenantId)}&select=sku,shopify_product_id,shopify_variant_id&order=sku.asc`,
@@ -188,6 +241,7 @@ async function runSmokeTest() {
 }
 
 await syncLiveIntegration();
+const syncedOverrides = await syncLiveInventoryMappings();
 const inventoryMappings = await fetchTenantInventoryMappings();
 
 console.log("Live Shopify validation is prepared.");
@@ -197,6 +251,24 @@ console.log(`Shop ID: ${shopId}`);
 console.log(`Topic: ${webhookTopic}`);
 console.log(`Webhook URL: ${tunnelBaseUrl}/api/webhooks/shopify`);
 console.log("");
+
+if (syncedOverrides.length > 0) {
+  console.log("Applied live Shopify ID overrides:");
+
+  for (const override of syncedOverrides) {
+    console.log(
+      `- ${override.sku}: product=${override.productId} variant=${override.variantId}`,
+    );
+  }
+
+  console.log("");
+} else {
+  console.log(
+    "No real Shopify product/variant ID overrides are configured yet. Real orders will only be processed if the store variant IDs already match the local inventory mappings below.",
+  );
+  console.log("");
+}
+
 console.log("Seeded inventory mappings for a live order:");
 
 for (const item of inventoryMappings) {
