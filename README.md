@@ -63,6 +63,7 @@ The repository is not yet at the full production target above. Today, the local 
 - Protected dashboard controls for quantity, safety floor, flash mode, and inventory filtering
 - Protected dashboard integration management for Shopify and ShipHero credentials, webhook secrets, and activation state
 - Dashboard audit history with field-level change summaries for recent inventory mutations
+- Automated Vitest route coverage for the dashboard APIs and webhook handlers
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
 
@@ -127,7 +128,13 @@ npm run supabase:types
 npm run dev
 ```
 
-10. Only use a tunnel for webhook testing against real Shopify or ShipHero callbacks. Day-to-day UI and database work should stay local.
+10. Run the automated route tests:
+
+```bash
+npm test
+```
+
+11. Only use a tunnel for webhook testing against real Shopify or ShipHero callbacks. Day-to-day UI and database work should stay local.
 
 ### Local Port Map
 
@@ -141,6 +148,7 @@ npm run dev
 - Use the seeded local data for dashboard and landing-page development.
 - Regenerate `src/types/supabase.ts` after changing tables or functions.
 - Test webhook handlers locally with saved payloads first.
+- Run `npm test` after changes to dashboard API routes or webhook handlers.
 - Replay the saved Shopify order fixture with `npm run webhook:replay:shopify`.
 - Replay the saved ShipHero PO and shipment fixtures with `npm run webhook:replay:shiphero:po` and `npm run webhook:replay:shiphero:shipment`.
 - Introduce ngrok or a similar tunnel only when validating real third-party webhook delivery.

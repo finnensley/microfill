@@ -47,6 +47,11 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Dashboard now supports tenant-scoped integration management for Shopify and ShipHero
 - Landing page lead capture writes into `leads`
 
+### Automated Coverage
+
+- Vitest route coverage now exists for dashboard APIs (`/api/inventory`, `/api/inventory/audit`, `/api/integrations`)
+- Vitest route coverage now exists for Shopify and ShipHero webhook handlers
+
 ### Webhook Foundation
 
 - Shopify and ShipHero webhook routes exist
@@ -62,7 +67,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 
 - Shopify webhook flow is validated locally with recorded payload replay, but not yet against live Shopify delivery
 - ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
-- No automated integration test coverage exists yet around the stabilized webhook and dashboard API paths
+- No live third-party delivery validation exists yet for Shopify or ShipHero
 
 ### Secondary Gaps
 
@@ -148,23 +153,23 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Add automated integration tests around the stabilized webhook paths.
-2. Validate live Shopify delivery against a tunnel or partner test store.
-3. Validate live ShipHero delivery against a tunnel or sandbox source.
-4. Add a fuller reconciliation summary view for operators.
-5. Harden webhook failure logging and retry strategy.
-6. Revisit OAuth only if operator onboarding needs exceed email-based auth.
+1. Validate live Shopify delivery against a tunnel or partner test store.
+2. Validate live ShipHero delivery against a tunnel or sandbox source.
+3. Add a fuller reconciliation summary view for operators.
+4. Harden webhook failure logging and retry strategy.
+5. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
-**Best next task:** add automated integration tests around the stabilized webhook and dashboard API paths.
+**Best next task:** validate live Shopify delivery against a tunnel or partner test store.
 
 Why:
 
 - Basic auth flow now includes sign-in, tenant assignment, protected routes, and sign-out.
 - The MVP auth direction is now settled on email-based Supabase Auth, which is enough for the current operator workflow.
 - The local operator surface is now in place for inventory controls, audit history, and integration management.
-- The highest remaining risk is regression across the newly stabilized local webhook and dashboard flows.
+- Automated route coverage now protects the stabilized local webhook and dashboard flows.
+- The highest remaining product risk is whether real third-party webhook delivery matches the replayed local payloads.
 
 ## Open Decisions
 
@@ -181,7 +186,7 @@ Why:
 - Webhook routes exist before they are fully validated against production-like payloads
 - No dead-letter or retry queue means repeated failures can still drop operational events
 - Audit history is visible, but broader operator analytics and reconciliation views are still missing
-- Integration secrets/config can now be managed per tenant in the dashboard, but there is still no test coverage protecting those flows
+- Integration secrets/config can now be managed per tenant in the dashboard, and route coverage exists, but live provider delivery is still unverified
 - Dashboard scale behavior is still unknown for large inventories
 
 ## Local Development Notes
@@ -196,6 +201,7 @@ Why:
   - `npm run supabase:reset`
   - `npm run supabase:env`
   - `npm run supabase:types`
+  - `npm test`
 
 ## Working Definition Of MVP
 

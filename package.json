@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
     "supabase:status": "npx supabase status",
@@ -32,6 +33,8 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.4"
   }
 }
