@@ -1,430 +1,197 @@
-# MicroFill Project Status & Roadmap
+# MicroFill Project Status
 
-**Last Updated:** April 15, 2026  
-**Project Stage:** MVP Development (Early Implementation Phase)  
+**Last Updated:** April 16, 2026  
+**Stage:** Local MVP build-out  
 **Owner:** soloSoftwareDev LLC
 
 ---
 
-## Executive Summary
-
-MicroFill is a specialized Micro-SaaS designed to solve "Shadow Inventory" problems during high-traffic Shopify launches ($1M+ events). The project aims to provide atomic-level inventory synchronization between micro-warehouses and Shopify storefronts using PostgreSQL's atomic buffering to prevent race conditions that break traditional API-based sync tools.
-
-**Core Innovation:** Triple-Sync Fail-Safe architecture:
-
-1. **Atomic Increments** - SQL-level atomic updates prevent Read-Modify-Write data loss
-2. **Safety Buffering** - Hides 5-10% of stock to absorb API latency during peak surges
-3. **Flash Mode** - Manual toggle to pause API updates during extreme peaks, then one-click reconciliation
-
----
-
-## Current Implementation Status
-
-### ✅ Completed
-
-#### Infrastructure & Setup
-
-- [x] Next.js 16 project initialized (App Router, TypeScript, Tailwind)
-- [x] Supabase integration configured
-- [x] Environment variables structure defined
-- [x] ESLint and build pipeline configured
-- [x] Basic TailwindCSS theming (slate-900 dark theme)
-- [x] Local Supabase Docker workflow documented for active development while hosted Supabase is paused
-
-#### Database Schema
-
-- [x] **Core Inventory Table** - `inventory_items` with atomic buffering fields:
-  - `committed_quantity` (atomic increment support)
-  - `safety_floor_quantity` (auto-calculated buffering)
-  - `flash_mode_enabled` (manual override during peaks)
-  - `shopify_variant_id` and `shopify_product_id` (Shopify mapping)
-  - `sku` (cross-system identifier for multi-WMS)
-
-- [x] **Multi-Tenancy Support** - Shopify shop isolation:
-  - `tenant_id` column on `inventory_items`
-  - Row-Level Security (RLS) policies enforced at DB level
-  - Composite indexes for fast tenant-scoped lookups: `(tenant_id, shopify_variant_id)`, `(tenant_id, sku)`
-
-- [x] **Atomic Functions** Created:
-  - `get_available_quantity()` - Calculates available QTY accounting for atomic buffering + safety floor
-  - `increment_committed_quantity()` - Atomically updates committed quantity (prevents race conditions)
-  - `update_safety_floor()` - Auto-recalculates safety floor when total quantity changes
-  - `update_inventory_timestamp()` - Maintains audit trail timestamps
-
-- [x] **Database Indexes** - Performance optimized for:
-  - `idx_inventory_tenant_variant` - Multi-tenant variant lookups
-  - `idx_inventory_tenant_sku` - Multi-tenant SKU lookups
-  - `idx_inventory_tenant` - Tenant-wide queries
-  - `idx_inventory_shopify_product_id` - Shopify product fast lookups
-  - `idx_inventory_updated_at` - Chronological queries
-
-#### Backend/Webhook Structure
-
-- [x] **Webhook Routing** - Established `/api/webhooks/shopify/` and `/api/webhooks/shiphero/` endpoints
-- [x] **Event Normalizer** - Created `InventoryEvent` interface for multi-WMS support
-- [x] **Core Sync Logic** - `processSyncEvent()` function handles:
-  - **stock_received** - Increments `total_quantity`
-  - **stock_shipped** - Decrements `total_quantity`
-  - Multi-source tracking (Shopify, ShipHero, Fishbowl, NetSuite)
-  - Tenant isolation enforcement
-
-- [x] **RPC Wrappers Created** - Supabase RPC calls for:
-  - `sync_shiphero_receiving()` - Stock receipt from ShipHero/warehouse
-  - `sync_shiphero_shipment()` - Stock shipment tracking
-  - Tenant-aware isolation on all RPC calls
-
-#### Frontend
-
-- [x] **Landing Page** - Basic homepage with email capture form:
-  - Dark theme (slate-900 background, green-400 accent)
-  - Hero messaging about Shadow Inventory elimination
-  - "Early Access" email collection flowing into `leads` table
-  - Client-side form with Supabase integration
-
-- [x] **Project Structure** - Organized component hierarchy:
-  - `/components/ui/` - Atomic UI components (ready for shadcn/ui integration)
-  - `/components/forms/` - Complex form components (folder exists, awaiting forms)
-  - `/components/shared/` - Navigation, sidebars, footers
-  - `/lib/` - Supabase client singleton
-  - `/services/` - Business logic wrappers (inventory-sync.ts)
-  - `/types/` - TypeScript definitions for inventory and ShipHero
-
-#### Authentication
-
-- [ ] **Supabase Auth** - Infrastructure in place (`(auth)` route group exists)
-  - Awaiting implementation of OTP and OAuth flows
-
-### 🚧 In Progress / Partially Complete
-
-- [x] Database schema (complete but needs audit logging table)
-- [~] Shopify webhook HMAC verification - basic verification exists in the route handler, but still needs end-to-end testing and hardening
-- [ ] ShipHero webhook handler - skeleton in place
-- [ ] Dashboard UI - folder structure exists, needs implementation
-- [x] RPC functions are present in migrations, but still need validation against real webhook payloads
-
-### ❌ Not Started
-
-- [ ] **Complete Authentication Flow**
-  - OTP signup/login in `(auth)` routes
-  - OAuth (Shopify or Supabase) flow
-  - Session persistence
-  - Protected routes (auth middleware)
-
-- [ ] **Audit Logging System**
-  - `audit_logs` table creation
-  - Postgres trigger to auto-log all inventory changes
-  - Audit trail UI for compliance
-
-- [ ] **Shopify Integration**
-  - HMAC verification in webhook handlers
-  - Shopify Admin API wrapper for product/variant lookups
-  - Store/shop context management
-  - Scope negotiation and API key management
-
-- [ ] **ShipHero Integration**
-  - Full webhook handler implementation
-  - ShipHero API wrapper for receiving/shipment data
-  - Error handling and retry logic
-
-- [ ] **Dashboard MVP**
-  - Real-time inventory view (using Supabase subscriptions)
-  - Manual stock adjustment forms
-  - Safety floor percentage adjustment UI
-  - Flash Mode toggle and reconciliation UI
-  - SKU search and filtering
-
-- [ ] **Mobile Scanner Component**
-  - React hook for barcode scanning: `useInventory()`
-  - Scanner UI component
-  - Real-time sync feedback
-
-- [ ] **Analytics & Reporting**
-  - Weekly sync reports via Resend email service
-  - Oversell prevention metrics
-  - API latency analysis dashboard
-  - Alert system for anomalies
-
-- [ ] **Testing Infrastructure**
-  - Unit tests for sync logic
-  - Integration tests for webhook handlers
-  - E2E tests for full sync flow
-  - Test environment with ShipHero/Shopify test stores
-
-- [ ] **Deployment & DevOps**
-  - Production environment variables
-  - CI/CD pipeline
-  - Database backup strategy
-  - Environment parity (dev/staging/prod)
-
-- [ ] **Security Hardening**
-  - API key encryption in database
-  - Rate limiting on webhooks
-  - CSP headers and security middleware
-  - Secrets management
-
-- [ ] **Documentation**
-  - API integration guide for Shopify/ShipHero
-  - Setup instructions for new tenants
-  - Architecture documentation
-  - Deployment runbook
-
----
-
-## Working List: Next Steps to Move Forward
-
-### Phase 1: Foundation (Current)
+## Current Position
 
-**Goal:** Establish working prototype with real webhook integration
+MicroFill now runs locally against Docker-backed Supabase and has a working auth, onboarding, and dashboard baseline. The project is past setup and schema bootstrapping. The main work is now turning the local prototype into an operator-ready MVP with tested Shopify and ShipHero flows.
 
-#### P1.1 Database Completeness
+## What Works Right Now
 
-- [x] Create `sync_shiphero_receiving()` RPC function in migrations
-- [x] Create `sync_shiphero_shipment()` RPC function in migrations
-- [ ] Add `audit_logs` table with triggers for all inventory changes
-- [ ] Add `integrations` table to store encrypted Shopify/ShipHero credentials
-- [ ] Create indexes on `audit_logs(inventory_id)` and `audit_logs(tenant_id, timestamp)`
+### Local Development
 
-**Effort:** 2-3 hours  
-**Dependencies:** None  
-**Blocks:** Shopify/ShipHero integration
+- Next.js app runs locally with the Supabase local stack
+- Local Supabase config, seed data, scripts, and env workflow are in place
+- Local auth email template is customized for the current sign-in flow
 
-#### P1.2 Shopify Webhook Implementation
+### Database
 
-- [x] Implement baseline HMAC-256 signature verification in `/api/webhooks/shopify/route.ts`
-- [ ] Create Shopify API wrapper service (`src/services/shopify-api.ts`) with:
-  - Product variant lookup by SKU
-  - Inventory level updates
-  - Error handling and retry logic
-- [ ] Connect incoming Shopify orders/inventory changes to `processSyncEvent()`
-- [ ] Test with Postman or ngrok + real Shopify store
-- [ ] Add logging for webhook health monitoring
+- `inventory_items` schema supports atomic buffering, safety floors, flash mode, and tenant scoping
+- Multi-tenant support exists with tenant-aware indexes and RLS-oriented design
+- Core RPC functions exist for ShipHero receipt and shipment syncing
+- Additional working tables exist for `leads`, `tenants`, and `user_tenant_assignments`
+- `audit_logs` table and `inventory_items` audit trigger are now in place for insert, update, and delete traceability
 
-**Effort:** 4-5 hours  
-**Dependencies:** P1.1 (RPC functions)  
-**Blocks:** End-to-end testing
+### Auth And Access
 
-#### P1.3 Authentication MVP
+- `/login` supports email sign-in
+- Users can sign in via magic link or manual OTP code
+- `/auth/callback` exchanges the magic-link code into a session
+- Middleware protects `/dashboard`
+- Users without tenant access are redirected to `/onboarding`
+- `/api/tenant-assignment` stores the selected tenant assignment
 
-- [ ] Implement Supabase OTP signup/login flow in `(auth)` routes
-- [ ] Create auth context/provider for session management
-- [ ] Add protected routes pattern (middleware for `/dashboard`)
-- [ ] Create logout functionality
-- [ ] Test with real Supabase project
+### Dashboard And Data Access
 
-**Effort:** 3-4 hours  
-**Dependencies:** Supabase project configured  
-**Blocks:** Dashboard development, testing
+- `/dashboard` renders for authenticated users
+- Inventory reads go through protected server-side access at `/api/inventory`
+- Seeded local inventory data displays in the dashboard
+- Landing page lead capture writes into `leads`
 
-#### P1.4 Dashboard Skeleton
+### Webhook Foundation
 
-- [ ] Create basic dashboard layout in `src/app/dashboard/page.tsx`
-- [ ] Implement real-time inventory list view using Supabase subscriptions
-- [ ] Add manual quantity adjustment form
-- [ ] Display safety floor info and flash mode toggle
-- [ ] Add basic error handling
+- Shopify and ShipHero webhook routes exist
+- Shopify route includes baseline HMAC verification
+- Shared inventory sync/service structure exists for incoming warehouse events
 
-**Effort:** 5-6 hours  
-**Dependencies:** P1.3 (auth), P1.1 (RPC functions)  
-**Blocks:** End-to-end testing
+## What Is Not Done
 
-**Estimated Phase 1 Timeline:** 2-3 weeks (concurrent work on P1.2 and P1.3)
+### Highest Priority Gaps
 
----
+- Shopify webhook flow is not end-to-end tested against real or realistic payloads
+- ShipHero webhook flow is not validated against real payloads
+- Dashboard is read-only and still missing operator controls
+- No integration credential storage exists yet
+- Audit history is not exposed in the dashboard yet
 
-### Phase 2: Integration & Testing
+### Secondary Gaps
 
-**Goal:** Production-ready webhook handlers and real data flow
+- No logout flow yet
+- No final production auth decision yet
+- No webhook retry/dead-letter path yet
+- No test suite yet
+- No production deployment plan yet
 
-#### P2.1 ShipHero Integration
+## Current Build Priorities
 
-- [ ] Implement ShipHero webhook handler in `/api/webhooks/shiphero/route.ts`
-- [ ] Create ShipHero API wrapper (`src/services/shiphero-api.ts`)
-- [ ] Test with ShipHero sandbox or real account
-- [ ] Implement error handling and dead-letter queue for failed syncs
+### Priority 1: Make Inventory Changes Traceable
 
-**Effort:** 4-5 hours  
-**Dependencies:** P1.1, P1.2 (template)  
-**Blocks:** Multi-WMS testing
+**Status:** Database-side audit foundation is implemented. UI exposure and operator access are still pending.
 
-#### P2.2 Testing Environment Setup
+**Goal:** Use the new audit foundation to support safer integration work and later dashboard history views.
 
-- [ ] Determine testing strategy: ShipHero sandbox vs. local test data
-- [ ] Create test Shopify store and ShipHero account (if needed)
-- [ ] Build seed scripts for test inventory data
-- [ ] Document testing procedures
+Deliverables:
 
-**Effort:** 2-3 hours  
-**Dependencies:** None (can parallel with P2.1)  
-**Blocks:** Integration testing
+- [x] Create `audit_logs` table
+- [x] Add DB trigger or function-based logging for inventory changes
+- [ ] Expose read-only audit history in the dashboard later
 
-#### P2.3 Audit Logging UI
+Why this is first:
 
-- [ ] Display audit logs in dashboard (read-only table)
-- [ ] Add filters by action type, date range, changed_by
-- [ ] Performance optimization for large audit log tables
-- [ ] Export audit logs to CSV
+- It reduces risk while debugging webhook behavior
+- It gives visibility into inventory mutations before real integrations are trusted
 
-**Effort:** 3-4 hours  
-**Dependencies:** P1.4 (dashboard exists)  
-**Blocks:** Compliance/production readiness
+### Priority 2: Finish Shopify Inbound Flow
 
-**Estimated Phase 2 Timeline:** 2-3 weeks
+**Goal:** Accept a real Shopify event and push it through the local inventory path safely.
 
----
+Deliverables:
 
-### Phase 3: Enhanced Features
+- Add Shopify service wrapper for variant and inventory operations as needed
+- Connect webhook payload handling to the existing sync logic
+- Validate signature handling with real or recorded payloads
+- Add structured logging around webhook success/failure
 
-**Goal:** Production optimization and advanced features
+Definition of done:
 
-#### P3.1 Real-time Sync Reporting
+- A real or replayed Shopify webhook updates local inventory predictably
+- The resulting state can be observed in the dashboard and database
 
-- [ ] Implement weekly email reports via Resend
-- [ ] Add dashboard charts for sync metrics
-- [ ] Create alert system for oversell attempts/anomalies
-- [ ] Metrics: API latency, sync success rate, peak concurrency
+### Priority 3: Finish ShipHero Inbound Flow
 
-**Effort:** 4-5 hours  
-**Dependencies:** P1.4 (dashboard exists)  
-**Blocks:** None
+**Goal:** Validate the warehouse-side sync path using the existing RPC foundation.
 
-#### P3.2 Multi-Tenant Admin Panel
+Deliverables:
 
-- [ ] Tenant management UI (create/delete/manage shops)
-- [ ] Per-tenant safety floor configuration
-- [ ] Per-tenant API key management (encrypted storage)
-- [ ] Tenant usage metrics and billing info
+- Harden ShipHero webhook parsing and validation
+- Map real payload fields to the existing sync event shape
+- Validate both receiving and shipment flows against realistic events
+- Add failure logging and an explicit retry strategy
 
-**Effort:** 5-6 hours  
-**Dependencies:** P1.3 (auth)  
-**Blocks:** Multi-customer go-to-market
+Definition of done:
 
-#### P3.3 Performance & Security Hardening
+- Receiving and shipment payloads update inventory correctly without manual DB intervention
 
-- [ ] Add rate limiting to webhooks
-- [ ] Implement database query performance monitoring
-- [ ] Security audit of RLS policies
-- [ ] API key encryption in `integrations` table
-- [ ] CSP headers and security middleware
+### Priority 4: Make The Dashboard Useful For Operators
 
-**Effort:** 4-5 hours  
-**Dependencies:** None (can parallel)  
-**Blocks:** Production deployment
+**Goal:** Move from read-only proof of life to a usable operations screen.
 
-**Estimated Phase 3 Timeline:** 2-3 weeks
+Deliverables:
 
----
+- Manual quantity adjustment form
+- Safety floor display and edit path
+- Flash mode toggle and reconciliation UI
+- Search/filtering for inventory items
 
-### Phase 4: Go-to-Market
+Definition of done:
 
-**Goal:** Landing page, documentation, and customer onboarding
+- An authenticated tenant user can inspect and make controlled inventory changes from the UI
 
-#### P4.1 Product Documentation
+## Recommended Execution Order
 
-- [ ] API integration guide for Shopify
-- [ ] API integration guide for ShipHero
-- [ ] Setup instructions for Supabase
-- [ ] Troubleshooting guide
+1. Add integration credential storage shape (`integrations` or equivalent).
+2. Complete Shopify inbound webhook handling and replay testing.
+3. Complete ShipHero inbound webhook handling and replay testing.
+4. Add dashboard adjustment controls.
+5. Expose audit history in the dashboard.
+6. Add logout and settle the production auth strategy.
+7. Add automated integration tests around the stabilized paths.
 
-**Effort:** 4-5 hours  
-**Dependencies:** P2.1 (all integrations complete)  
-**Blocks:** Customer onboarding
+## Immediate Next Task
 
-#### P4.2 Landing Page Refinement
+**Best next task:** add integration credential storage.
 
-- [ ] Update hero messaging with product benefits
-- [ ] Add use case sections (high-traffic launches, 3PL inventory, etc.)
-- [ ] Create product demo video or interactive walkthrough
-- [ ] Refine email capture flow
+Why:
 
-**Effort:** 3-4 hours  
-**Dependencies:** None  
-**Blocks:** Customer acquisition
+- Both Shopify and ShipHero flows will need a clear place for tenant-scoped credentials and configuration.
+- It is the next schema dependency before the webhook work becomes meaningfully production-shaped.
+- Audit logging is now available to support debugging while the integration layer is built out.
 
-#### P4.3 Customer Onboarding Flow
+## Open Decisions
 
-- [ ] Create guided setup wizard for new tenants
-- [ ] API key generation and secure storage
-- [ ] Webhook URL configuration for Shopify/ShipHero
-- [ ] Test sync walkthrough
+### Authentication
 
-**Effort:** 4-5 hours  
-**Dependencies:** P3.2 (tenant admin)  
-**Blocks:** First customers
+- Keep production auth as email sign-in only, or add Shopify OAuth as a first-class path?
 
-**Estimated Phase 4 Timeline:** 2-3 weeks
+### Integration Testing
 
----
+- Use recorded payload fixtures only, or require live/sandbox Shopify and ShipHero testing during development?
 
-## Open Questions & Decisions Needed
+### Scope Control
 
-1. **Authentication Strategy**
-   - Use Supabase OTP + Shopify OAuth, or Supabase alone?
-   - Impact: Customer identity verification and onboarding flow
+- Keep Fishbowl and NetSuite out of MVP until Shopify and ShipHero are stable.
 
-2. **Testing Infrastructure**
-   - Do we need live ShipHero account to develop, or can we mock?
-   - Options: Sandbox environment, local database mocks, or real integration?
-   - Impact: Development velocity and integration complexity
+## Known Risks
 
-3. **Domain & Branding**
-   - Use `microfill` subdomain or existing `solosoftwaredev` domain?
-   - Impact: Customer perception and future product line expansion
+- Webhook routes exist before they are fully validated against production-like payloads
+- No dead-letter or retry queue means repeated failures can still drop operational events
+- Audit events are stored, but there is not yet a UI or operator-facing query path for them
+- Dashboard scale behavior is still unknown for large inventories
 
-4. **3PL Partnerships**
-   - Should we proactively reach out to 3PLs (ShipBob, Barrettecs)?
-   - If yes: Who owns the sales/integration relationship? What's the value prop?
-   - Impact: Go-to-market and revenue model
+## Local Development Notes
 
-5. **Historical WMS Support**
-   - Should we add integrations for Fishbowl/NetSuite now or later?
-   - Fishbowl is common in micro-fulfillment
-   - Impact: MVP scope and time-to-market
+- Hosted Supabase remains paused; local Docker-backed Supabase is the active development path.
+- Local stack config: `supabase/config.toml`
+- Local seed data: `supabase/seed.sql`
+- Local auth email template: `supabase/templates/magic-link.html`
+- Main local commands:
+  - `npm run supabase:start`
+  - `npm run supabase:stop`
+  - `npm run supabase:reset`
+  - `npm run supabase:env`
+  - `npm run supabase:types`
 
----
+## Working Definition Of MVP
 
-## Success Metrics (Interim)
+The MVP is done when all of the following are true:
 
-- [ ] End-to-end sync: Shopify order → Database → Real-time UI update (< 2 seconds)
-- [ ] Zero oversells during synthetic high-concurrency test (1000+ concurrent orders)
-- [ ] HMAC webhook verification preventing spoofed requests
-- [ ] Audit trail shows 100% of inventory changes (no missing logs)
-- [ ] Multi-tenant isolation enforced at database level
-- [ ] All RPC functions return correct atomic increments
-- [ ] Dashboard loads with < 1 second for 10K+ inventory items
-
----
-
-## Tech Debt & Known Issues
-
-- [ ] Validate the existing `sync_shiphero_receiving()` and `sync_shiphero_shipment()` RPC functions against real ShipHero payloads
-- [ ] Add comprehensive error handling in webhook handlers (currently minimal)
-- [ ] No dead-letter queue for failed syncs (will lose data on repeat failures)
-- [ ] Dashboard performance not tested at scale (10K+ items)
-- [ ] No caching strategy for frequently accessed inventory data
-
----
-
-## Local Development Note
-
-- Hosted Supabase is currently paused, so active development should use the local Docker-backed Supabase stack.
-- Local stack configuration lives in `supabase/config.toml` and seeded data lives in `supabase/seed.sql`.
-- Use `npm run supabase:start` to boot the stack, `npm run supabase:env` to retrieve local keys, and `npm run supabase:reset` to rebuild the local database from migrations and seed data.
-
----
-
-## Resources & References
-
-- **Shopify Webhook Docs:** https://shopify.dev/docs/apps/webhooks
-- **Supabase RPC:** https://supabase.com/docs/guides/database/functions
-- **Row-Level Security:** https://supabase.com/docs/guides/auth/row-level-security
-- **Next.js API Routes:** https://nextjs.org/docs/app/building-your-application/routing/route-handlers
-- **PostgreSQL Triggers:** https://www.postgresql.org/docs/current/sql-createtrigger.html
-
----
-
-## Notes
-
-- This project prioritizes **correctness over speed** — atomic buffers and RLS are non-negotiable
-- All webhook handlers must verify HMAC signatures to prevent spoofing
-- Multi-tenancy is baked into the schema from day one (no refactoring later)
-- Safety floor and flash mode are key differentiators vs. traditional middleware
+- Authenticated users can sign in, get assigned to a tenant, and reach the dashboard
+- Shopify inbound events can be validated and applied locally
+- ShipHero inbound events can be validated and applied locally
+- Inventory mutations are auditable
+- Operators can review and make key inventory adjustments from the dashboard
+- Local development remains reproducible from migrations, seed data, and documented commands

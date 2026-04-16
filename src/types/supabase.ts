@@ -9,6 +9,48 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      audit_logs: {
+        Row: {
+          action: string
+          actor_role: string | null
+          actor_user_id: string | null
+          changed_columns: string[] | null
+          created_at: string
+          id: string
+          inventory_item_id: string | null
+          new_values: Json | null
+          old_values: Json | null
+          source: string
+          tenant_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_role?: string | null
+          actor_user_id?: string | null
+          changed_columns?: string[] | null
+          created_at?: string
+          id?: string
+          inventory_item_id?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          source?: string
+          tenant_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_role?: string | null
+          actor_user_id?: string | null
+          changed_columns?: string[] | null
+          created_at?: string
+          id?: string
+          inventory_item_id?: string | null
+          new_values?: Json | null
+          old_values?: Json | null
+          source?: string
+          tenant_id?: string | null
+        }
+        Relationships: []
+      }
       inventory_items: {
         Row: {
           committed_quantity: number
@@ -142,6 +184,10 @@ export type Database = {
             Args: { item_id: string; tenant_id_input: string }
             Returns: number
           }
+      get_changed_inventory_columns: {
+        Args: { new_row: Json; old_row: Json }
+        Returns: string[]
+      }
       increment_committed_quantity:
         | { Args: { amount: number; item_id: string }; Returns: number }
         | {
