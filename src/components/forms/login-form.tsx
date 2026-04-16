@@ -66,10 +66,12 @@ export function LoginForm() {
     <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950 p-8 text-white shadow-xl">
       <h1 className="text-2xl font-semibold tracking-tight">Sign in</h1>
       <p className="mt-2 text-sm text-slate-400">
-        Use email sign-in for local auth testing. Protected routes will redirect
-        here when no session is present. The link in the email signs you in
-        directly. The one-time code below is a fallback if you prefer to paste
-        it manually.
+        Email sign-in is the current MVP auth path for both local development
+        and the first production release. Protected routes will redirect here
+        when no session is present. The link in the email signs you in directly.
+        The one-time code below is a fallback if you prefer to paste it
+        manually. Shopify OAuth is deferred until the core operator workflow is
+        stable.
       </p>
 
       <form

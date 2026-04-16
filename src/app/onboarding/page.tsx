@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { LogoutButton } from "@/components/forms/logout-button";
 import { TenantOnboardingForm } from "@/components/forms/tenant-onboarding-form";
 import {
   getDefaultTenantId,
@@ -32,11 +33,17 @@ export default async function OnboardingPage() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-6 py-12">
-      <TenantOnboardingForm
-        defaultTenantId={getDefaultTenantId()}
-        email={user.email ?? null}
-        tenantOptions={tenantOptions}
-      />
+      <div className="w-full max-w-xl space-y-4">
+        <div className="flex justify-end">
+          <LogoutButton />
+        </div>
+
+        <TenantOnboardingForm
+          defaultTenantId={getDefaultTenantId()}
+          email={user.email ?? null}
+          tenantOptions={tenantOptions}
+        />
+      </div>
     </main>
   );
 }

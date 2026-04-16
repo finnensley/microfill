@@ -33,6 +33,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Users can sign in via magic link or manual OTP code
 - `/auth/callback` exchanges the magic-link code into a session
 - Middleware protects `/dashboard`
+- Authenticated users can sign out from `/dashboard` and `/onboarding`
 - Users without tenant access are redirected to `/onboarding`
 - `/api/tenant-assignment` stores the selected tenant assignment
 
@@ -64,8 +65,6 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 
 ### Secondary Gaps
 
-- No logout flow yet
-- No final production auth decision yet
 - No webhook retry/dead-letter path yet
 - No test suite yet
 - No production deployment plan yet
@@ -148,29 +147,25 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Add logout and settle the production auth strategy.
-2. Add integration management UI.
-3. Add automated integration tests around the stabilized webhook paths.
-4. Validate live Shopify delivery against a tunnel or partner test store.
-5. Validate live ShipHero delivery against a tunnel or sandbox source.
-6. Add a fuller reconciliation summary view for operators.
-7. Harden webhook failure logging and retry strategy.
+1. Add integration management UI.
+2. Add automated integration tests around the stabilized webhook paths.
+3. Validate live Shopify delivery against a tunnel or partner test store.
+4. Validate live ShipHero delivery against a tunnel or sandbox source.
+5. Add a fuller reconciliation summary view for operators.
+6. Harden webhook failure logging and retry strategy.
+7. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
-**Best next task:** add logout and settle the production auth strategy.
+**Best next task:** add integration management UI.
 
 Why:
 
-- The dashboard now covers both operator controls and recent audit visibility.
-- Auth still lacks a basic logout path and the production sign-in direction remains unresolved.
-- Tightening auth next reduces friction before adding more operator and integration surfaces.
+- Basic auth flow now includes sign-in, tenant assignment, protected routes, and sign-out.
+- The MVP auth direction is now settled on email-based Supabase Auth, which is enough for the current operator workflow.
+- Integration configuration is the next largest missing operator surface.
 
 ## Open Decisions
-
-### Authentication
-
-- Keep production auth as email sign-in only, or add Shopify OAuth as a first-class path?
 
 ### Integration Testing
 
@@ -184,7 +179,7 @@ Why:
 
 - Webhook routes exist before they are fully validated against production-like payloads
 - No dead-letter or retry queue means repeated failures can still drop operational events
-- Audit events are stored, but there is not yet a UI or operator-facing query path for them
+- Audit history is visible, but broader operator analytics and reconciliation views are still missing
 - Integration secrets/config can be stored per tenant, but there is not yet an operator-facing workflow for managing them
 - Dashboard scale behavior is still unknown for large inventories
 

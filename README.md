@@ -19,7 +19,7 @@ This section describes the intended end-state architecture, not only what is alr
 
 - Framework: Next.js 16 with App Router, TypeScript, and Tailwind
 - Database: PostgreSQL via Supabase with PL/pgSQL atomic functions and tenant-aware schema design
-- Auth: Supabase Auth with production auth strategy to be finalized between email sign-in and Shopify OAuth-assisted flows
+- Auth: Supabase Auth with email-based sign-in as the MVP production path; Shopify OAuth can be added later if onboarding needs expand
 - Integration Layer: HMAC-verified webhook ingestion plus service wrappers for Shopify and ShipHero
 - Operations Layer: inventory dashboard, audit trail, manual controls, flash mode, and reconciliation workflows
 - Communications: Resend or equivalent transactional email/reporting channel for alerts and summaries
@@ -53,6 +53,7 @@ The repository is not yet at the full production target above. Today, the local 
 
 - Local Docker-backed Supabase development workflow
 - Working email sign-in with both magic-link and manual OTP paths
+- Logout flow for authenticated dashboard and onboarding sessions
 - Protected dashboard and onboarding flow
 - Server-side tenant-aware inventory reads
 - Seeded local inventory data and generated database types
@@ -146,8 +147,10 @@ npm run dev
 ## Current Local Auth Flow
 
 - `/login` supports email sign-in for local development.
+- Email-based Supabase Auth is the chosen MVP auth strategy for the first production release.
 - Users can continue by clicking the magic link or by manually entering the one-time code from the same email.
 - `/dashboard` is protected by middleware and redirects to `/login` when no session is present.
+- Authenticated users can sign out from `/dashboard` and `/onboarding`.
 - `/onboarding` explicitly assigns a tenant to the current user when no assignment exists yet.
 - Inventory reads resolve tenant access on the server using the authenticated user context and explicit tenant assignment records.
 - Tenant choices come from the `tenants` table, not from inventory records.
