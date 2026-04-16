@@ -12,7 +12,8 @@
     "supabase:status": "npx supabase status",
     "supabase:env": "npx supabase status -o env",
     "supabase:reset": "npx supabase db reset",
-    "supabase:types": "npx supabase gen types typescript --local --schema public > src/types/supabase.ts"
+    "supabase:types": "npx supabase gen types typescript --local --schema public > src/types/supabase.ts",
+    "webhook:replay:shopify": "node scripts/replay-shopify-order.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

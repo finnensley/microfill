@@ -57,7 +57,8 @@ The repository is not yet at the full production target above. Today, the local 
 - Server-side tenant-aware inventory reads
 - Seeded local inventory data and generated database types
 - Tenant-scoped integration storage for Shopify and ShipHero configuration
-- Baseline Shopify webhook verification and ShipHero sync foundations
+- Recorded Shopify webhook replay tooling with database and audit-log verification
+- Baseline ShipHero sync foundations
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
 
@@ -136,6 +137,7 @@ npm run dev
 - Use the seeded local data for dashboard and landing-page development.
 - Regenerate `src/types/supabase.ts` after changing tables or functions.
 - Test webhook handlers locally with saved payloads first.
+- Replay the saved Shopify order fixture with `npm run webhook:replay:shopify`.
 - Introduce ngrok or a similar tunnel only when validating real third-party webhook delivery.
 
 ## Current Local Auth Flow

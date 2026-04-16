@@ -1,0 +1,13 @@
+{
+  "id": "shopify-order-demo-1001",
+  "line_items": [
+    {
+      "variant_id": "shopify-variant-101",
+      "quantity": 2
+    },
+    {
+      "variant_id": "shopify-variant-102",
+      "quantity": 1
+    }
+  ]
+}

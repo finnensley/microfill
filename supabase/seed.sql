@@ -1,3 +1,11 @@
+INSERT INTO tenants (id, name, slug)
+VALUES (
+  '10000000-0000-0000-0000-000000000001',
+  'MicroFill Demo Tenant',
+  'microfill-demo-tenant'
+)
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO inventory_items (
   id,
   tenant_id,
@@ -39,3 +47,34 @@ VALUES
     NOW()
   )
 ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO integrations (
+  id,
+  tenant_id,
+  provider,
+  status,
+  display_name,
+  external_account_id,
+  external_shop_domain,
+  webhook_secret,
+  config
+)
+VALUES (
+  '20000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'shopify',
+  'active',
+  'Local Shopify Replay',
+  'demo-shop',
+  'demo-shop.myshopify.com',
+  'replace-for-local-testing',
+  '{}'::jsonb
+)
+ON CONFLICT (tenant_id, provider) DO UPDATE
+SET
+  status = EXCLUDED.status,
+  display_name = EXCLUDED.display_name,
+  external_account_id = EXCLUDED.external_account_id,
+  external_shop_domain = EXCLUDED.external_shop_domain,
+  webhook_secret = EXCLUDED.webhook_secret,
+  config = EXCLUDED.config;

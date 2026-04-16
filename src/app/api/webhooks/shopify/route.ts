@@ -17,6 +17,9 @@ type ShopifyWebhookOrder = {
 export async function POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
+    let processed = 0;
+    let skipped = 0;
+    let failed = 0;
 
     const shopId = req.headers.get("x-shopify-shop-id");
     const shopDomain = req.headers.get("x-shopify-shop-domain");
@@ -32,7 +35,7 @@ export async function POST(req: Request) {
 
     // 2. Get the raw body as text for HMAC verification
     const rawBody = await req.text();
-    const hmacHeader = req.headers.get("x-shopify-hmac-sha256");
+    const hmacHeader = req.headers.get("x-shopify-hmac-sha256")?.trim();
 
     // 3. Verify HMAC signature - Prevent unauthorized webhook calls
     if (!hmacHeader) {
@@ -63,10 +66,23 @@ export async function POST(req: Request) {
       .createHmac("sha256", shopifyWebhookSecret)
       .update(rawBody, "utf8")
       .digest("base64");
+    const isSignatureValid =
+      generatedHash.length === hmacHeader.length &&
+      crypto.timingSafeEqual(
+        Buffer.from(generatedHash, "utf8"),
+        Buffer.from(hmacHeader, "utf8"),
+      );
 
     // 4. Security Check: Compare hashes
-    if (generatedHash !== hmacHeader) {
-      console.error("Invalid Webhook Signature");
+    if (!isSignatureValid) {
+      console.error("Invalid Shopify webhook signature", {
+        tenantId: resolvedTenantId,
+        shopId,
+        shopDomain,
+        hasIntegration: Boolean(integration),
+        receivedSignaturePrefix: hmacHeader.slice(0, 8),
+        expectedSignaturePrefix: generatedHash.slice(0, 8),
+      });
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -76,7 +92,7 @@ export async function POST(req: Request) {
 
     if (!line_items || line_items.length === 0) {
       return NextResponse.json(
-        { received: true, verified: true },
+        { received: true, verified: true, processed, skipped, failed },
         { status: 200 },
       );
     }
@@ -98,6 +114,7 @@ export async function POST(req: Request) {
         console.warn(
           `Inventory item not found for tenant ${resolvedTenantId} variant ${variantId}`,
         );
+        skipped++;
         continue;
       }
 
@@ -115,11 +132,25 @@ export async function POST(req: Request) {
 
       if (syncError) {
         console.error(`Error syncing variant ${variantId}:`, syncError);
+        failed++;
+        continue;
       }
+
+      processed++;
     }
 
+    console.info("Processed Shopify webhook", {
+      tenantId: resolvedTenantId,
+      shopId,
+      shopDomain,
+      orderId,
+      processed,
+      skipped,
+      failed,
+    });
+
     return NextResponse.json(
-      { received: true, verified: true, orderId },
+      { received: true, verified: true, orderId, processed, skipped, failed },
       { status: 200 },
     );
   } catch (err) {

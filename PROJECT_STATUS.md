@@ -49,12 +49,13 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Shopify route includes baseline HMAC verification
 - Shared inventory sync/service structure exists for incoming warehouse events
 - Webhook handlers can now resolve tenant-scoped integration configuration with env fallback
+- Recorded Shopify replay tooling now exists for local webhook validation
 
 ## What Is Not Done
 
 ### Highest Priority Gaps
 
-- Shopify webhook flow is not end-to-end tested against real or realistic payloads
+- Shopify webhook flow is validated locally with recorded payload replay, but not yet against live Shopify delivery
 - ShipHero webhook flow is not validated against real payloads
 - Dashboard is read-only and still missing operator controls
 - Audit history is not exposed in the dashboard yet
@@ -89,14 +90,17 @@ Why this is first:
 
 ### Priority 2: Finish Shopify Inbound Flow
 
+**Status:** Recorded payload replay now succeeds locally and verifies inventory plus audit-log side effects. Live Shopify delivery is still pending.
+
 **Goal:** Accept a real Shopify event and push it through the local inventory path safely.
 
 Deliverables:
 
-- Add Shopify service wrapper for variant and inventory operations as needed
-- Connect webhook payload handling to the existing sync logic
-- Validate signature handling with real or recorded payloads
-- Add structured logging around webhook success/failure
+- [x] Connect webhook payload handling to the existing inventory commit path
+- [x] Validate signature handling with recorded payload replay
+- [x] Add structured logging around webhook success/failure
+- [x] Add local replay tooling and demo integration seed support
+- [ ] Validate delivery from a live Shopify store or tunnel
 
 Definition of done:
 
@@ -135,23 +139,23 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Complete Shopify inbound webhook handling and replay testing.
-2. Complete ShipHero inbound webhook handling and replay testing.
-3. Add dashboard adjustment controls.
-4. Expose audit history in the dashboard.
-5. Add logout and settle the production auth strategy.
-6. Add integration management UI.
-7. Add automated integration tests around the stabilized paths.
+1. Complete ShipHero inbound webhook handling and replay testing.
+2. Add dashboard adjustment controls.
+3. Expose audit history in the dashboard.
+4. Add logout and settle the production auth strategy.
+5. Add integration management UI.
+6. Add automated integration tests around the stabilized webhook paths.
+7. Validate live Shopify delivery against a tunnel or partner test store.
 
 ## Immediate Next Task
 
-**Best next task:** validate and complete the Shopify inbound webhook flow.
+**Best next task:** validate and complete the ShipHero inbound webhook flow.
 
 Why:
 
-- The main schema dependencies are now in place: audit logging plus tenant-scoped integration storage.
-- Shopify is the next highest-risk external boundary and should be validated before expanding UI controls.
-- The new integration storage and audit trail provide enough foundation to debug real webhook handling safely.
+- The local replay path now proves the Shopify inbound flow works against recorded payloads.
+- ShipHero is the next unvalidated external boundary and uses the same integration and audit foundations.
+- Finishing ShipHero next keeps webhook risk reduction ahead of operator UI work.
 
 ## Open Decisions
 
