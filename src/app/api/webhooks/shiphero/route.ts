@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { getShipHeroWebhookSecret } from "@/lib/supabase-config";
+import { resolveIntegration } from "@/services/integrations";
 import { ShipHeroPOUpdate, ShipHeroShipmentUpdate } from "@/types/shiphero";
 import {
   processSyncEventsBatch,
@@ -15,17 +16,12 @@ import {
  */
 export async function POST(req: Request) {
   try {
-    const shipHeroWebhookSecret = getShipHeroWebhookSecret();
+    const tenantHeader = req.headers.get("x-tenant-id");
+    const shopIdHeader = req.headers.get("x-shopify-shop-id");
+    const shipHeroAccountId = req.headers.get("x-shiphero-account-id");
 
-    // 1. Extract tenant_id from header (for multi-tenancy support)
-    // ShipHero webhooks should include X-Shopify-Shop-ID or custom tenant identifier
-    const tenantId =
-      req.headers.get("x-shopify-shop-id") || req.headers.get("x-tenant-id");
-
-    if (!tenantId) {
-      console.error(
-        "Missing tenant ID header (x-shopify-shop-id or x-tenant-id)",
-      );
+    if (!tenantHeader && !shopIdHeader && !shipHeroAccountId) {
+      console.error("Missing tenant or integration identifier header");
       return NextResponse.json(
         { error: "Missing tenant identifier" },
         { status: 400 },
@@ -40,6 +36,25 @@ export async function POST(req: Request) {
     if (!hmacHeader) {
       console.error("Missing ShipHero HMAC header");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const integration = await resolveIntegration({
+      provider: "shiphero",
+      tenantId: tenantHeader,
+      externalAccountId: shipHeroAccountId ?? shopIdHeader,
+    });
+
+    const resolvedTenantId =
+      integration?.tenant_id ?? tenantHeader ?? shopIdHeader;
+    const shipHeroWebhookSecret =
+      integration?.webhook_secret ?? getShipHeroWebhookSecret();
+
+    if (!resolvedTenantId) {
+      console.error("Unable to resolve tenant for ShipHero webhook");
+      return NextResponse.json(
+        { error: "Missing tenant identifier" },
+        { status: 400 },
+      );
     }
 
     const generatedHash = crypto
@@ -57,9 +72,12 @@ export async function POST(req: Request) {
     const body = JSON.parse(rawBody);
 
     if (body.webhook_type === "PO Update") {
-      return handlePOUpdate(body as ShipHeroPOUpdate, tenantId);
+      return handlePOUpdate(body as ShipHeroPOUpdate, resolvedTenantId);
     } else if (body.webhook_type === "Shipment Update") {
-      return handleShipmentUpdate(body as ShipHeroShipmentUpdate, tenantId);
+      return handleShipmentUpdate(
+        body as ShipHeroShipmentUpdate,
+        resolvedTenantId,
+      );
     }
 
     return NextResponse.json(

@@ -25,6 +25,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Core RPC functions exist for ShipHero receipt and shipment syncing
 - Additional working tables exist for `leads`, `tenants`, and `user_tenant_assignments`
 - `audit_logs` table and `inventory_items` audit trigger are now in place for insert, update, and delete traceability
+- `integrations` table now exists for tenant-scoped Shopify and ShipHero credentials/configuration
 
 ### Auth And Access
 
@@ -47,6 +48,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Shopify and ShipHero webhook routes exist
 - Shopify route includes baseline HMAC verification
 - Shared inventory sync/service structure exists for incoming warehouse events
+- Webhook handlers can now resolve tenant-scoped integration configuration with env fallback
 
 ## What Is Not Done
 
@@ -55,8 +57,8 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Shopify webhook flow is not end-to-end tested against real or realistic payloads
 - ShipHero webhook flow is not validated against real payloads
 - Dashboard is read-only and still missing operator controls
-- No integration credential storage exists yet
 - Audit history is not exposed in the dashboard yet
+- Integration management UI does not exist yet
 
 ### Secondary Gaps
 
@@ -133,23 +135,23 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Add integration credential storage shape (`integrations` or equivalent).
-2. Complete Shopify inbound webhook handling and replay testing.
-3. Complete ShipHero inbound webhook handling and replay testing.
-4. Add dashboard adjustment controls.
-5. Expose audit history in the dashboard.
-6. Add logout and settle the production auth strategy.
+1. Complete Shopify inbound webhook handling and replay testing.
+2. Complete ShipHero inbound webhook handling and replay testing.
+3. Add dashboard adjustment controls.
+4. Expose audit history in the dashboard.
+5. Add logout and settle the production auth strategy.
+6. Add integration management UI.
 7. Add automated integration tests around the stabilized paths.
 
 ## Immediate Next Task
 
-**Best next task:** add integration credential storage.
+**Best next task:** validate and complete the Shopify inbound webhook flow.
 
 Why:
 
-- Both Shopify and ShipHero flows will need a clear place for tenant-scoped credentials and configuration.
-- It is the next schema dependency before the webhook work becomes meaningfully production-shaped.
-- Audit logging is now available to support debugging while the integration layer is built out.
+- The main schema dependencies are now in place: audit logging plus tenant-scoped integration storage.
+- Shopify is the next highest-risk external boundary and should be validated before expanding UI controls.
+- The new integration storage and audit trail provide enough foundation to debug real webhook handling safely.
 
 ## Open Decisions
 
@@ -170,6 +172,7 @@ Why:
 - Webhook routes exist before they are fully validated against production-like payloads
 - No dead-letter or retry queue means repeated failures can still drop operational events
 - Audit events are stored, but there is not yet a UI or operator-facing query path for them
+- Integration secrets/config can be stored per tenant, but there is not yet an operator-facing workflow for managing them
 - Dashboard scale behavior is still unknown for large inventories
 
 ## Local Development Notes

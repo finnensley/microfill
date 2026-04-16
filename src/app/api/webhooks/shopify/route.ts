@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getShopifyWebhookSecret } from "@/lib/supabase-config";
+import { resolveIntegration } from "@/services/integrations";
 
 type ShopifyWebhookLineItem = {
   quantity: number;
@@ -16,11 +17,12 @@ type ShopifyWebhookOrder = {
 export async function POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
-    const shopifyWebhookSecret = getShopifyWebhookSecret();
 
-    // 1. Extract tenant_id from Shopify shop ID (multi-tenancy support)
     const shopId = req.headers.get("x-shopify-shop-id");
-    if (!shopId) {
+    const shopDomain = req.headers.get("x-shopify-shop-domain");
+    const tenantHeader = req.headers.get("x-tenant-id");
+
+    if (!shopId && !shopDomain && !tenantHeader) {
       console.error("Missing Shopify Shop ID header");
       return NextResponse.json(
         { error: "Invalid webhook source" },
@@ -36,6 +38,25 @@ export async function POST(req: Request) {
     if (!hmacHeader) {
       console.error("Missing Shopify HMAC header");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const integration = await resolveIntegration({
+      provider: "shopify",
+      tenantId: tenantHeader,
+      externalAccountId: shopId,
+      externalShopDomain: shopDomain,
+    });
+
+    const resolvedTenantId = integration?.tenant_id ?? tenantHeader ?? shopId;
+    const shopifyWebhookSecret =
+      integration?.webhook_secret ?? getShopifyWebhookSecret();
+
+    if (!resolvedTenantId) {
+      console.error("Unable to resolve tenant for Shopify webhook");
+      return NextResponse.json(
+        { error: "Invalid webhook source" },
+        { status: 400 },
+      );
     }
 
     const generatedHash = crypto
@@ -69,13 +90,13 @@ export async function POST(req: Request) {
       const { data: inventoryItem, error: lookupError } = await supabase
         .from("inventory_items")
         .select("id")
-        .eq("tenant_id", shopId)
+        .eq("tenant_id", resolvedTenantId)
         .eq("shopify_variant_id", variantId)
         .single();
 
       if (lookupError || !inventoryItem) {
         console.warn(
-          `Inventory item not found for tenant ${shopId} variant ${variantId}`,
+          `Inventory item not found for tenant ${resolvedTenantId} variant ${variantId}`,
         );
         continue;
       }
@@ -86,7 +107,7 @@ export async function POST(req: Request) {
       const { error: syncError } = await supabase.rpc(
         "increment_committed_quantity",
         {
-          tenant_id_input: shopId,
+          tenant_id_input: resolvedTenantId,
           item_id: inventoryItem.id,
           amount: quantitySold,
         },

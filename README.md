@@ -56,6 +56,7 @@ The repository is not yet at the full production target above. Today, the local 
 - Protected dashboard and onboarding flow
 - Server-side tenant-aware inventory reads
 - Seeded local inventory data and generated database types
+- Tenant-scoped integration storage for Shopify and ShipHero configuration
 - Baseline Shopify webhook verification and ShipHero sync foundations
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).

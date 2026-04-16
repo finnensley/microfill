@@ -51,6 +51,68 @@ export type Database = {
         }
         Relationships: []
       }
+      integrations: {
+        Row: {
+          api_key: string | null
+          api_secret: string | null
+          config: Json
+          created_at: string
+          display_name: string | null
+          external_account_id: string | null
+          external_shop_domain: string | null
+          id: string
+          last_error: string | null
+          last_synced_at: string | null
+          provider: string
+          status: string
+          tenant_id: string
+          updated_at: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          api_key?: string | null
+          api_secret?: string | null
+          config?: Json
+          created_at?: string
+          display_name?: string | null
+          external_account_id?: string | null
+          external_shop_domain?: string | null
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          provider: string
+          status?: string
+          tenant_id: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          api_key?: string | null
+          api_secret?: string | null
+          config?: Json
+          created_at?: string
+          display_name?: string | null
+          external_account_id?: string | null
+          external_shop_domain?: string | null
+          id?: string
+          last_error?: string | null
+          last_synced_at?: string | null
+          provider?: string
+          status?: string
+          tenant_id?: string
+          updated_at?: string
+          webhook_secret?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "integrations_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory_items: {
         Row: {
           committed_quantity: number
