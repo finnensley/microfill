@@ -1,6 +1,11 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInventory } from "@/hooks/use-inventory";
+import {
+  managedIntegrationProviders,
+  ManagedIntegrationProvider,
+  ManagedIntegrationRecord,
+} from "@/types/integrations";
 import { InventoryAuditEntry, InventoryItem } from "@/types/inventory";
 
 interface InventoryDashboardProps {
@@ -12,6 +17,35 @@ type DraftItemState = {
   safetyFloorPercent: string;
   totalQuantity: string;
 };
+
+type IntegrationDraftState = {
+  apiKey: string;
+  apiSecret: string;
+  displayName: string;
+  externalAccountId: string;
+  externalShopDomain: string;
+  status: "draft" | "active" | "disabled" | "error";
+  webhookSecret: string;
+};
+
+function createIntegrationDraft(
+  integration?: ManagedIntegrationRecord,
+): IntegrationDraftState {
+  return {
+    apiKey: integration?.api_key ?? "",
+    apiSecret: integration?.api_secret ?? "",
+    displayName: integration?.display_name ?? "",
+    externalAccountId: integration?.external_account_id ?? "",
+    externalShopDomain: integration?.external_shop_domain ?? "",
+    status:
+      integration?.status === "active" ||
+      integration?.status === "disabled" ||
+      integration?.status === "error"
+        ? integration.status
+        : "draft",
+    webhookSecret: integration?.webhook_secret ?? "",
+  };
+}
 
 function createDraftState(item: InventoryItem): DraftItemState {
   return {
@@ -92,6 +126,25 @@ export default function InventoryDashboard({
   const [auditHistory, setAuditHistory] = useState<InventoryAuditEntry[]>([]);
   const [auditLoading, setAuditLoading] = useState(true);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [integrations, setIntegrations] = useState<ManagedIntegrationRecord[]>(
+    [],
+  );
+  const [integrationDrafts, setIntegrationDrafts] = useState<
+    Record<ManagedIntegrationProvider, IntegrationDraftState>
+  >({
+    shopify: createIntegrationDraft(),
+    shiphero: createIntegrationDraft(),
+  });
+  const [integrationLoading, setIntegrationLoading] = useState(true);
+  const [integrationError, setIntegrationError] = useState<string | null>(null);
+  const [savingIntegrationProvider, setSavingIntegrationProvider] =
+    useState<ManagedIntegrationProvider | null>(null);
+  const [integrationStatusMessage, setIntegrationStatusMessage] = useState<
+    string | null
+  >(null);
+  const [integrationStatusTone, setIntegrationStatusTone] = useState<
+    "error" | "success" | null
+  >(null);
 
   useEffect(() => {
     setDrafts((currentDrafts) => {
@@ -104,6 +157,68 @@ export default function InventoryDashboard({
       return nextDrafts;
     });
   }, [items]);
+
+  useEffect(() => {
+    setIntegrationDrafts(() => {
+      const nextDrafts = {
+        shopify: createIntegrationDraft(),
+        shiphero: createIntegrationDraft(),
+      };
+
+      for (const provider of managedIntegrationProviders) {
+        const integration = integrations.find(
+          (candidate) => candidate.provider === provider,
+        );
+
+        nextDrafts[provider] = createIntegrationDraft(integration ?? undefined);
+      }
+
+      return nextDrafts;
+    });
+  }, [integrations]);
+
+  const refreshIntegrations = useCallback(async () => {
+    if (!tenantId) {
+      setIntegrations([]);
+      setIntegrationError(
+        "No tenant is configured for this account yet. Complete onboarding or assign app_metadata.tenant_id for the user.",
+      );
+      setIntegrationLoading(false);
+      return;
+    }
+
+    try {
+      setIntegrationLoading(true);
+      const response = await fetch(
+        `/api/integrations?tenantId=${encodeURIComponent(tenantId)}`,
+      );
+      const responseText = await response.text();
+      const payload = (responseText ? JSON.parse(responseText) : {}) as {
+        error?: string;
+        integrations?: ManagedIntegrationRecord[];
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to load integrations.");
+      }
+
+      setIntegrations(payload.integrations ?? []);
+      setIntegrationError(null);
+    } catch (loadError) {
+      console.error("Error fetching integrations:", loadError);
+      setIntegrationError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Unknown error while loading integrations.",
+      );
+    } finally {
+      setIntegrationLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void refreshIntegrations();
+  }, [refreshIntegrations]);
 
   const refreshAuditHistory = useCallback(async () => {
     if (!tenantId) {
@@ -194,6 +309,18 @@ export default function InventoryDashboard({
     });
   }, [auditHistory, searchTerm]);
 
+  const integrationCards = useMemo(
+    () =>
+      managedIntegrationProviders.map((provider) => ({
+        draft: integrationDrafts[provider] ?? createIntegrationDraft(),
+        integration:
+          integrations.find((candidate) => candidate.provider === provider) ??
+          null,
+        provider,
+      })),
+    [integrationDrafts, integrations],
+  );
+
   function updateDraft(
     itemId: string,
     field: keyof DraftItemState,
@@ -210,6 +337,103 @@ export default function InventoryDashboard({
         [field]: value,
       },
     }));
+  }
+
+  function updateIntegrationDraft(
+    provider: ManagedIntegrationProvider,
+    field: keyof IntegrationDraftState,
+    value: string,
+  ) {
+    setIntegrationDrafts((currentDrafts) => ({
+      ...currentDrafts,
+      [provider]: {
+        ...(currentDrafts[provider] ?? createIntegrationDraft()),
+        [field]: value,
+      },
+    }));
+  }
+
+  async function saveIntegration(provider: ManagedIntegrationProvider) {
+    const draft = integrationDrafts[provider] ?? createIntegrationDraft();
+
+    if (
+      provider === "shopify" &&
+      draft.status === "active" &&
+      !draft.externalShopDomain.trim()
+    ) {
+      setIntegrationStatusTone("error");
+      setIntegrationStatusMessage(
+        "Active Shopify integrations require a shop domain.",
+      );
+      return;
+    }
+
+    if (
+      provider === "shiphero" &&
+      draft.status === "active" &&
+      !draft.externalAccountId.trim()
+    ) {
+      setIntegrationStatusTone("error");
+      setIntegrationStatusMessage(
+        "Active ShipHero integrations require an external account ID.",
+      );
+      return;
+    }
+
+    setSavingIntegrationProvider(provider);
+    setIntegrationStatusMessage(null);
+    setIntegrationStatusTone(null);
+
+    try {
+      const response = await fetch("/api/integrations", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          apiKey: draft.apiKey,
+          apiSecret: draft.apiSecret,
+          displayName: draft.displayName,
+          externalAccountId: draft.externalAccountId,
+          externalShopDomain: draft.externalShopDomain,
+          provider,
+          status: draft.status,
+          webhookSecret: draft.webhookSecret,
+        }),
+      });
+      const responseText = await response.text();
+      const payload = (responseText ? JSON.parse(responseText) : {}) as {
+        error?: string;
+        integration?: ManagedIntegrationRecord;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to save integration.");
+      }
+
+      if (payload.integration) {
+        setIntegrationDrafts((currentDrafts) => ({
+          ...currentDrafts,
+          [provider]: createIntegrationDraft(payload.integration),
+        }));
+      }
+
+      await refreshIntegrations();
+      setIntegrationStatusTone("success");
+      setIntegrationStatusMessage(
+        `Saved ${provider === "shopify" ? "Shopify" : "ShipHero"} integration settings.`,
+      );
+    } catch (saveError) {
+      console.error("Error saving integration:", saveError);
+      setIntegrationStatusTone("error");
+      setIntegrationStatusMessage(
+        saveError instanceof Error
+          ? saveError.message
+          : "Unknown error while saving integration.",
+      );
+    } finally {
+      setSavingIntegrationProvider(null);
+    }
   }
 
   async function saveItem(item: InventoryItem) {
@@ -341,6 +565,241 @@ export default function InventoryDashboard({
             }`}
           >
             {statusMessage}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-slate-900">
+            Integration management
+          </p>
+          <p className="text-sm text-slate-600">
+            Configure tenant-scoped Shopify and ShipHero credentials, webhook
+            secrets, and activation state.
+          </p>
+        </div>
+
+        {integrationStatusMessage ? (
+          <div
+            className={`mt-4 rounded-lg px-3 py-2 text-sm ${
+              integrationStatusTone === "error"
+                ? "border border-rose-200 bg-rose-50 text-rose-900"
+                : "border border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            {integrationStatusMessage}
+          </div>
+        ) : null}
+
+        {integrationLoading ? (
+          <p className="mt-4 text-sm text-slate-600">
+            Loading integration settings...
+          </p>
+        ) : null}
+
+        {integrationError ? (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {integrationError}
+          </div>
+        ) : null}
+
+        {!integrationLoading && !integrationError ? (
+          <div className="mt-4 grid gap-4 lg:grid-cols-2">
+            {integrationCards.map(({ provider, integration, draft }) => {
+              const title = provider === "shopify" ? "Shopify" : "ShipHero";
+
+              return (
+                <div
+                  key={provider}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">
+                        {title}
+                      </h3>
+                      <p className="text-sm text-slate-600">
+                        {provider === "shopify"
+                          ? "Manage storefront webhook identity and shared secrets."
+                          : "Manage warehouse webhook identity and API credentials."}
+                      </p>
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      <p>Status: {integration?.status ?? "draft"}</p>
+                      <p>
+                        Last synced:{" "}
+                        {integration?.last_synced_at
+                          ? new Date(
+                              integration.last_synced_at,
+                            ).toLocaleString()
+                          : "Never"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {integration?.last_error ? (
+                    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                      Last error: {integration.last_error}
+                    </div>
+                  ) : null}
+
+                  <form
+                    className="mt-4 grid gap-3"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void saveIntegration(provider);
+                    }}
+                  >
+                    <label className="flex flex-col gap-1 text-sm text-slate-700">
+                      Display name
+                      <input
+                        value={draft.displayName}
+                        onChange={(event) =>
+                          updateIntegrationDraft(
+                            provider,
+                            "displayName",
+                            event.target.value,
+                          )
+                        }
+                        placeholder={`${title} connection`}
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                      />
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-sm text-slate-700">
+                      Status
+                      <select
+                        value={draft.status}
+                        onChange={(event) =>
+                          updateIntegrationDraft(
+                            provider,
+                            "status",
+                            event.target.value,
+                          )
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                      >
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="disabled">Disabled</option>
+                        <option value="error">Error</option>
+                      </select>
+                    </label>
+
+                    <label className="flex flex-col gap-1 text-sm text-slate-700">
+                      {provider === "shopify"
+                        ? "Shop domain"
+                        : "External account ID"}
+                      <input
+                        value={
+                          provider === "shopify"
+                            ? draft.externalShopDomain
+                            : draft.externalAccountId
+                        }
+                        onChange={(event) =>
+                          updateIntegrationDraft(
+                            provider,
+                            provider === "shopify"
+                              ? "externalShopDomain"
+                              : "externalAccountId",
+                            event.target.value,
+                          )
+                        }
+                        placeholder={
+                          provider === "shopify"
+                            ? "demo-shop.myshopify.com"
+                            : "demo-shiphero-account"
+                        }
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                      />
+                    </label>
+
+                    {provider === "shopify" ? (
+                      <label className="flex flex-col gap-1 text-sm text-slate-700">
+                        External account ID
+                        <input
+                          value={draft.externalAccountId}
+                          onChange={(event) =>
+                            updateIntegrationDraft(
+                              provider,
+                              "externalAccountId",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="demo-shop"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                        />
+                      </label>
+                    ) : null}
+
+                    <label className="flex flex-col gap-1 text-sm text-slate-700">
+                      Webhook secret
+                      <input
+                        type="password"
+                        value={draft.webhookSecret}
+                        onChange={(event) =>
+                          updateIntegrationDraft(
+                            provider,
+                            "webhookSecret",
+                            event.target.value,
+                          )
+                        }
+                        placeholder="replace-for-local-testing"
+                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                      />
+                    </label>
+
+                    {provider === "shiphero" ? (
+                      <>
+                        <label className="flex flex-col gap-1 text-sm text-slate-700">
+                          API key
+                          <input
+                            value={draft.apiKey}
+                            onChange={(event) =>
+                              updateIntegrationDraft(
+                                provider,
+                                "apiKey",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="ShipHero API key"
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                          />
+                        </label>
+
+                        <label className="flex flex-col gap-1 text-sm text-slate-700">
+                          API secret
+                          <input
+                            type="password"
+                            value={draft.apiSecret}
+                            onChange={(event) =>
+                              updateIntegrationDraft(
+                                provider,
+                                "apiSecret",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="ShipHero API secret"
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                          />
+                        </label>
+                      </>
+                    ) : null}
+
+                    <button
+                      type="submit"
+                      disabled={savingIntegrationProvider === provider}
+                      className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                    >
+                      {savingIntegrationProvider === provider
+                        ? "Saving..."
+                        : `Save ${title}`}
+                    </button>
+                  </form>
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </div>

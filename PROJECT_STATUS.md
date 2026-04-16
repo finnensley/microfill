@@ -44,6 +44,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Seeded local inventory data displays in the dashboard
 - Dashboard now supports operator updates for on-hand quantity, safety floor percent, and flash mode
 - Dashboard now shows recent tenant-scoped audit history with field-level change summaries
+- Dashboard now supports tenant-scoped integration management for Shopify and ShipHero
 - Landing page lead capture writes into `leads`
 
 ### Webhook Foundation
@@ -61,7 +62,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 
 - Shopify webhook flow is validated locally with recorded payload replay, but not yet against live Shopify delivery
 - ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
-- Integration management UI does not exist yet
+- No automated integration test coverage exists yet around the stabilized webhook and dashboard API paths
 
 ### Secondary Gaps
 
@@ -147,23 +148,23 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Add integration management UI.
-2. Add automated integration tests around the stabilized webhook paths.
-3. Validate live Shopify delivery against a tunnel or partner test store.
-4. Validate live ShipHero delivery against a tunnel or sandbox source.
-5. Add a fuller reconciliation summary view for operators.
-6. Harden webhook failure logging and retry strategy.
-7. Revisit OAuth only if operator onboarding needs exceed email-based auth.
+1. Add automated integration tests around the stabilized webhook paths.
+2. Validate live Shopify delivery against a tunnel or partner test store.
+3. Validate live ShipHero delivery against a tunnel or sandbox source.
+4. Add a fuller reconciliation summary view for operators.
+5. Harden webhook failure logging and retry strategy.
+6. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
-**Best next task:** add integration management UI.
+**Best next task:** add automated integration tests around the stabilized webhook and dashboard API paths.
 
 Why:
 
 - Basic auth flow now includes sign-in, tenant assignment, protected routes, and sign-out.
 - The MVP auth direction is now settled on email-based Supabase Auth, which is enough for the current operator workflow.
-- Integration configuration is the next largest missing operator surface.
+- The local operator surface is now in place for inventory controls, audit history, and integration management.
+- The highest remaining risk is regression across the newly stabilized local webhook and dashboard flows.
 
 ## Open Decisions
 
@@ -180,7 +181,7 @@ Why:
 - Webhook routes exist before they are fully validated against production-like payloads
 - No dead-letter or retry queue means repeated failures can still drop operational events
 - Audit history is visible, but broader operator analytics and reconciliation views are still missing
-- Integration secrets/config can be stored per tenant, but there is not yet an operator-facing workflow for managing them
+- Integration secrets/config can now be managed per tenant in the dashboard, but there is still no test coverage protecting those flows
 - Dashboard scale behavior is still unknown for large inventories
 
 ## Local Development Notes

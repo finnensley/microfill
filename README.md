@@ -61,6 +61,7 @@ The repository is not yet at the full production target above. Today, the local 
 - Recorded Shopify webhook replay tooling with database and audit-log verification
 - Recorded ShipHero PO and shipment replay tooling with database and audit-log verification
 - Protected dashboard controls for quantity, safety floor, flash mode, and inventory filtering
+- Protected dashboard integration management for Shopify and ShipHero credentials, webhook secrets, and activation state
 - Dashboard audit history with field-level change summaries for recent inventory mutations
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
@@ -154,6 +155,7 @@ npm run dev
 - `/onboarding` explicitly assigns a tenant to the current user when no assignment exists yet.
 - Inventory reads resolve tenant access on the server using the authenticated user context and explicit tenant assignment records.
 - Tenant choices come from the `tenants` table, not from inventory records.
+- `/dashboard` now includes tenant-scoped integration settings so operators can manage Shopify and ShipHero configuration without manual SQL edits.
 
 ## Planned Scope Beyond The Current Build
 
