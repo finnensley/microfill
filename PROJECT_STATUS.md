@@ -42,6 +42,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Inventory reads go through protected server-side access at `/api/inventory`
 - Seeded local inventory data displays in the dashboard
 - Dashboard now supports operator updates for on-hand quantity, safety floor percent, and flash mode
+- Dashboard now shows recent tenant-scoped audit history with field-level change summaries
 - Landing page lead capture writes into `leads`
 
 ### Webhook Foundation
@@ -59,7 +60,6 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 
 - Shopify webhook flow is validated locally with recorded payload replay, but not yet against live Shopify delivery
 - ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
-- Audit history is not exposed in the dashboard yet
 - Integration management UI does not exist yet
 
 ### Secondary Gaps
@@ -74,7 +74,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 
 ### Priority 1: Make Inventory Changes Traceable
 
-**Status:** Database-side audit foundation is implemented. UI exposure and operator access are still pending.
+**Status:** Database-side audit foundation and dashboard audit history are implemented. Broader operator analytics are still pending.
 
 **Goal:** Use the new audit foundation to support safer integration work and later dashboard history views.
 
@@ -82,7 +82,7 @@ Deliverables:
 
 - [x] Create `audit_logs` table
 - [x] Add DB trigger or function-based logging for inventory changes
-- [ ] Expose read-only audit history in the dashboard later
+- [x] Expose read-only audit history in the dashboard
 
 Why this is first:
 
@@ -129,7 +129,7 @@ Definition of done:
 
 ### Priority 4: Make The Dashboard Useful For Operators
 
-**Status:** Core operator controls are now implemented locally for search, on-hand quantity updates, safety floor edits, and flash mode toggles. Audit history and broader reconciliation views are still pending.
+**Status:** Core operator controls and recent audit history are now implemented locally. Broader reconciliation views are still pending.
 
 **Goal:** Move from read-only proof of life to a usable operations screen.
 
@@ -139,6 +139,7 @@ Deliverables:
 - [x] Safety floor display and edit path
 - [x] Flash mode toggle
 - [x] Search/filtering for inventory items
+- [x] Recent audit history panel
 - [ ] Reconciliation-focused summary/history UI
 
 Definition of done:
@@ -147,23 +148,23 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Expose audit history in the dashboard.
-2. Add logout and settle the production auth strategy.
-3. Add integration management UI.
-4. Add automated integration tests around the stabilized webhook paths.
-5. Validate live Shopify delivery against a tunnel or partner test store.
-6. Validate live ShipHero delivery against a tunnel or sandbox source.
-7. Add a fuller reconciliation summary view for operators.
+1. Add logout and settle the production auth strategy.
+2. Add integration management UI.
+3. Add automated integration tests around the stabilized webhook paths.
+4. Validate live Shopify delivery against a tunnel or partner test store.
+5. Validate live ShipHero delivery against a tunnel or sandbox source.
+6. Add a fuller reconciliation summary view for operators.
+7. Harden webhook failure logging and retry strategy.
 
 ## Immediate Next Task
 
-**Best next task:** expose audit history in the dashboard.
+**Best next task:** add logout and settle the production auth strategy.
 
 Why:
 
-- Both webhook flows and manual dashboard adjustments now write auditable inventory mutations.
-- The highest-value next UI increment is showing operators what changed and when.
-- Audit history closes the loop on the controls that now exist and improves debugging without opening a new integration surface.
+- The dashboard now covers both operator controls and recent audit visibility.
+- Auth still lacks a basic logout path and the production sign-in direction remains unresolved.
+- Tightening auth next reduces friction before adding more operator and integration surfaces.
 
 ## Open Decisions
 

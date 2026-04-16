@@ -60,6 +60,7 @@ The repository is not yet at the full production target above. Today, the local 
 - Recorded Shopify webhook replay tooling with database and audit-log verification
 - Recorded ShipHero PO and shipment replay tooling with database and audit-log verification
 - Protected dashboard controls for quantity, safety floor, flash mode, and inventory filtering
+- Dashboard audit history with field-level change summaries for recent inventory mutations
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
 

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import { useInventory } from "@/hooks/use-inventory";
-import { InventoryItem } from "@/types/inventory";
+import { InventoryAuditEntry, InventoryItem } from "@/types/inventory";
 
 interface InventoryDashboardProps {
   tenantId: string | null;
@@ -21,6 +21,61 @@ function createDraftState(item: InventoryItem): DraftItemState {
   };
 }
 
+function formatAuditValue(value: unknown) {
+  if (typeof value === "boolean") {
+    return value ? "On" : "Off";
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return "-";
+  }
+
+  return JSON.stringify(value);
+}
+
+function formatChangedField(field: string) {
+  return field
+    .split("_")
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function summarizeAuditChanges(entry: InventoryAuditEntry) {
+  const fields = entry.changed_columns ?? [];
+
+  if (fields.length === 0) {
+    return [];
+  }
+
+  const oldValues =
+    entry.old_values &&
+    typeof entry.old_values === "object" &&
+    !Array.isArray(entry.old_values)
+      ? entry.old_values
+      : {};
+  const newValues =
+    entry.new_values &&
+    typeof entry.new_values === "object" &&
+    !Array.isArray(entry.new_values)
+      ? entry.new_values
+      : {};
+
+  return fields.map((field) => {
+    const oldValue = Reflect.get(oldValues, field) as unknown;
+    const newValue = Reflect.get(newValues, field) as unknown;
+
+    return `${formatChangedField(field)}: ${formatAuditValue(oldValue)} -> ${formatAuditValue(newValue)}`;
+  });
+}
+
 export default function InventoryDashboard({
   tenantId,
 }: InventoryDashboardProps) {
@@ -34,6 +89,9 @@ export default function InventoryDashboard({
   const [statusTone, setStatusTone] = useState<"error" | "success" | null>(
     null,
   );
+  const [auditHistory, setAuditHistory] = useState<InventoryAuditEntry[]>([]);
+  const [auditLoading, setAuditLoading] = useState(true);
+  const [auditError, setAuditError] = useState<string | null>(null);
 
   useEffect(() => {
     setDrafts((currentDrafts) => {
@@ -46,6 +104,49 @@ export default function InventoryDashboard({
       return nextDrafts;
     });
   }, [items]);
+
+  async function refreshAuditHistory() {
+    if (!tenantId) {
+      setAuditHistory([]);
+      setAuditError(
+        "No tenant is configured for this account yet. Complete onboarding or assign app_metadata.tenant_id for the user.",
+      );
+      setAuditLoading(false);
+      return;
+    }
+
+    try {
+      setAuditLoading(true);
+      const response = await fetch(
+        `/api/inventory/audit?tenantId=${encodeURIComponent(tenantId)}&limit=12`,
+      );
+      const responseText = await response.text();
+      const payload = (responseText ? JSON.parse(responseText) : {}) as {
+        error?: string;
+        history?: InventoryAuditEntry[];
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Unable to load audit history.");
+      }
+
+      setAuditHistory(payload.history ?? []);
+      setAuditError(null);
+    } catch (historyError) {
+      console.error("Error fetching audit history:", historyError);
+      setAuditError(
+        historyError instanceof Error
+          ? historyError.message
+          : "Unknown error while loading audit history.",
+      );
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void refreshAuditHistory();
+  }, [tenantId]);
 
   const filteredItems = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
@@ -66,6 +167,32 @@ export default function InventoryDashboard({
       );
     });
   }, [items, searchTerm]);
+
+  const filteredAuditHistory = useMemo(() => {
+    const normalizedSearch = searchTerm.trim().toLowerCase();
+
+    if (!normalizedSearch) {
+      return auditHistory;
+    }
+
+    return auditHistory.filter((entry) => {
+      const changeSummary = summarizeAuditChanges(entry)
+        .join(" ")
+        .toLowerCase();
+      const haystacks = [
+        entry.itemLabel,
+        entry.itemProductId,
+        entry.itemSku,
+        entry.action,
+        entry.source,
+        changeSummary,
+      ];
+
+      return haystacks.some((value) =>
+        value?.toLowerCase().includes(normalizedSearch),
+      );
+    });
+  }, [auditHistory, searchTerm]);
 
   function updateDraft(
     itemId: string,
@@ -144,7 +271,7 @@ export default function InventoryDashboard({
         }));
       }
 
-      await refresh();
+      await Promise.all([refresh(), refreshAuditHistory()]);
       setStatusTone("success");
       setStatusMessage(
         `Saved operator controls for ${item.sku ?? item.shopify_product_id}.`,
@@ -214,6 +341,89 @@ export default function InventoryDashboard({
             }`}
           >
             {statusMessage}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-slate-900">
+            Recent audit history
+          </p>
+          <p className="text-sm text-slate-600">
+            Review the latest tenant-scoped inventory mutations from webhook
+            syncs and manual operator changes.
+          </p>
+        </div>
+
+        {auditLoading ? (
+          <p className="mt-4 text-sm text-slate-600">
+            Loading audit history...
+          </p>
+        ) : null}
+
+        {auditError ? (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {auditError}
+          </div>
+        ) : null}
+
+        {!auditLoading && !auditError && filteredAuditHistory.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-600">
+            No audit entries match the current filter.
+          </p>
+        ) : null}
+
+        {!auditLoading && !auditError && filteredAuditHistory.length > 0 ? (
+          <div className="mt-4 grid gap-3">
+            {filteredAuditHistory.map((entry) => {
+              const changes = summarizeAuditChanges(entry);
+
+              return (
+                <div
+                  key={entry.id}
+                  className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3"
+                >
+                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {entry.itemLabel ?? "Unknown inventory item"}
+                      </p>
+                      <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                        {entry.action} via {entry.source}
+                      </p>
+                    </div>
+                    <p className="text-xs text-slate-500">
+                      {new Date(entry.created_at).toLocaleString()}
+                    </p>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
+                    {entry.itemProductId ? (
+                      <span>Product: {entry.itemProductId}</span>
+                    ) : null}
+                    {entry.actor_role ? (
+                      <span>Actor role: {entry.actor_role}</span>
+                    ) : null}
+                    {entry.actor_user_id ? (
+                      <span>User: {entry.actor_user_id}</span>
+                    ) : null}
+                  </div>
+
+                  {changes.length > 0 ? (
+                    <div className="mt-3 grid gap-2 text-sm text-slate-700">
+                      {changes.map((change) => (
+                        <p key={`${entry.id}-${change}`}>{change}</p>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-600">
+                      No field-level diff was captured for this entry.
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ) : null}
       </div>
