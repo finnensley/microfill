@@ -58,7 +58,8 @@ The repository is not yet at the full production target above. Today, the local 
 - Seeded local inventory data and generated database types
 - Tenant-scoped integration storage for Shopify and ShipHero configuration
 - Recorded Shopify webhook replay tooling with database and audit-log verification
-- Baseline ShipHero sync foundations
+- Recorded ShipHero PO and shipment replay tooling with database and audit-log verification
+- Protected dashboard controls for quantity, safety floor, flash mode, and inventory filtering
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
 
@@ -138,6 +139,7 @@ npm run dev
 - Regenerate `src/types/supabase.ts` after changing tables or functions.
 - Test webhook handlers locally with saved payloads first.
 - Replay the saved Shopify order fixture with `npm run webhook:replay:shopify`.
+- Replay the saved ShipHero PO and shipment fixtures with `npm run webhook:replay:shiphero:po` and `npm run webhook:replay:shiphero:shipment`.
 - Introduce ngrok or a similar tunnel only when validating real third-party webhook delivery.
 
 ## Current Local Auth Flow

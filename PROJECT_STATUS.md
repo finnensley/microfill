@@ -41,6 +41,7 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - `/dashboard` renders for authenticated users
 - Inventory reads go through protected server-side access at `/api/inventory`
 - Seeded local inventory data displays in the dashboard
+- Dashboard now supports operator updates for on-hand quantity, safety floor percent, and flash mode
 - Landing page lead capture writes into `leads`
 
 ### Webhook Foundation
@@ -50,14 +51,14 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Shared inventory sync/service structure exists for incoming warehouse events
 - Webhook handlers can now resolve tenant-scoped integration configuration with env fallback
 - Recorded Shopify replay tooling now exists for local webhook validation
+- Recorded ShipHero replay tooling now exists for PO receipt and shipment validation
 
 ## What Is Not Done
 
 ### Highest Priority Gaps
 
 - Shopify webhook flow is validated locally with recorded payload replay, but not yet against live Shopify delivery
-- ShipHero webhook flow is not validated against real payloads
-- Dashboard is read-only and still missing operator controls
+- ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
 - Audit history is not exposed in the dashboard yet
 - Integration management UI does not exist yet
 
@@ -109,14 +110,18 @@ Definition of done:
 
 ### Priority 3: Finish ShipHero Inbound Flow
 
+**Status:** Recorded PO and shipment payload replays now succeed locally and verify inventory plus audit-log side effects. Live ShipHero delivery is still pending.
+
 **Goal:** Validate the warehouse-side sync path using the existing RPC foundation.
 
 Deliverables:
 
-- Harden ShipHero webhook parsing and validation
-- Map real payload fields to the existing sync event shape
-- Validate both receiving and shipment flows against realistic events
-- Add failure logging and an explicit retry strategy
+- [x] Harden ShipHero webhook parsing and validation
+- [x] Map recorded payload fields to the existing sync event shape
+- [x] Validate both receiving and shipment flows against realistic local events
+- [x] Add structured success logging around ShipHero replay results
+- [ ] Add failure logging and an explicit retry strategy
+- [ ] Validate delivery from a live ShipHero source or tunnel
 
 Definition of done:
 
@@ -124,14 +129,17 @@ Definition of done:
 
 ### Priority 4: Make The Dashboard Useful For Operators
 
+**Status:** Core operator controls are now implemented locally for search, on-hand quantity updates, safety floor edits, and flash mode toggles. Audit history and broader reconciliation views are still pending.
+
 **Goal:** Move from read-only proof of life to a usable operations screen.
 
 Deliverables:
 
-- Manual quantity adjustment form
-- Safety floor display and edit path
-- Flash mode toggle and reconciliation UI
-- Search/filtering for inventory items
+- [x] Manual quantity adjustment form
+- [x] Safety floor display and edit path
+- [x] Flash mode toggle
+- [x] Search/filtering for inventory items
+- [ ] Reconciliation-focused summary/history UI
 
 Definition of done:
 
@@ -139,23 +147,23 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Complete ShipHero inbound webhook handling and replay testing.
-2. Add dashboard adjustment controls.
-3. Expose audit history in the dashboard.
-4. Add logout and settle the production auth strategy.
-5. Add integration management UI.
-6. Add automated integration tests around the stabilized webhook paths.
-7. Validate live Shopify delivery against a tunnel or partner test store.
+1. Expose audit history in the dashboard.
+2. Add logout and settle the production auth strategy.
+3. Add integration management UI.
+4. Add automated integration tests around the stabilized webhook paths.
+5. Validate live Shopify delivery against a tunnel or partner test store.
+6. Validate live ShipHero delivery against a tunnel or sandbox source.
+7. Add a fuller reconciliation summary view for operators.
 
 ## Immediate Next Task
 
-**Best next task:** validate and complete the ShipHero inbound webhook flow.
+**Best next task:** expose audit history in the dashboard.
 
 Why:
 
-- The local replay path now proves the Shopify inbound flow works against recorded payloads.
-- ShipHero is the next unvalidated external boundary and uses the same integration and audit foundations.
-- Finishing ShipHero next keeps webhook risk reduction ahead of operator UI work.
+- Both webhook flows and manual dashboard adjustments now write auditable inventory mutations.
+- The highest-value next UI increment is showing operators what changed and when.
+- Audit history closes the loop on the controls that now exist and improves debugging without opening a new integration surface.
 
 ## Open Decisions
 

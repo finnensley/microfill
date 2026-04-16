@@ -1,0 +1,25 @@
+{
+  "webhook_type": "PO Update",
+  "po_id": 3001,
+  "po_number": "PO-DEMO-3001",
+  "status": "partially_received",
+  "warehouse_id": 501,
+  "line_items": [
+    {
+      "sku": "SKU-DEMO-RED",
+      "quantity": 20,
+      "quantity_received": 7,
+      "sellable_quantity": 127,
+      "product_name": "Demo Red Bottle",
+      "barcode": "RED-DEMO-001"
+    },
+    {
+      "sku": "SKU-DEMO-BLUE",
+      "quantity": 10,
+      "quantity_received": 4,
+      "sellable_quantity": 52,
+      "product_name": "Demo Blue Bottle",
+      "barcode": "BLUE-DEMO-001"
+    }
+  ]
+}

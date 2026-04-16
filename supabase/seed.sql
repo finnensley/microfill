@@ -78,3 +78,31 @@ SET
   external_shop_domain = EXCLUDED.external_shop_domain,
   webhook_secret = EXCLUDED.webhook_secret,
   config = EXCLUDED.config;
+
+INSERT INTO integrations (
+  id,
+  tenant_id,
+  provider,
+  status,
+  display_name,
+  external_account_id,
+  webhook_secret,
+  config
+)
+VALUES (
+  '20000000-0000-0000-0000-000000000002',
+  '10000000-0000-0000-0000-000000000001',
+  'shiphero',
+  'active',
+  'Local ShipHero Replay',
+  'demo-shiphero-account',
+  'replace-for-local-testing',
+  '{}'::jsonb
+)
+ON CONFLICT (tenant_id, provider) DO UPDATE
+SET
+  status = EXCLUDED.status,
+  display_name = EXCLUDED.display_name,
+  external_account_id = EXCLUDED.external_account_id,
+  webhook_secret = EXCLUDED.webhook_secret,
+  config = EXCLUDED.config;

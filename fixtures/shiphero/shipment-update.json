@@ -1,0 +1,16 @@
+{
+  "webhook_type": "Shipment Update",
+  "order_id": 4001,
+  "order_number": "ORDER-DEMO-4001",
+  "tracking_number": "TRACK-DEMO-4001",
+  "line_items": [
+    {
+      "sku": "SKU-DEMO-RED",
+      "quantity": 3
+    },
+    {
+      "sku": "SKU-DEMO-BLUE",
+      "quantity": 2
+    }
+  ]
+}
