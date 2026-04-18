@@ -1,6 +1,6 @@
 # MicroFill Project Status
 
-**Last Updated:** April 16, 2026  
+**Last Updated:** April 18, 2026  
 **Stage:** Local MVP build-out  
 **Owner:** soloSoftwareDev LLC
 
@@ -9,6 +9,8 @@
 ## Current Position
 
 MicroFill now runs locally against Docker-backed Supabase and has a working auth, onboarding, and dashboard baseline. The project is past setup and schema bootstrapping. The main work is now turning the local prototype into an operator-ready MVP with tested Shopify and ShipHero flows.
+
+Live Shopify validation is now confirmed end-to-end: a real Shopify delivery reached the local route through the Cloudflare tunnel, matched the mapped store variants, and produced the expected tenant-scoped `committed_quantity` and `audit_logs` mutations locally. The main remaining integration risk is now live ShipHero delivery.
 
 ## What Works Right Now
 
@@ -60,15 +62,17 @@ MicroFill now runs locally against Docker-backed Supabase and has a working auth
 - Webhook handlers can now resolve tenant-scoped integration configuration with env fallback
 - Recorded Shopify replay tooling now exists for local webhook validation
 - Shopify live-validation helper now exists to sync tenant config and print tunnel/store setup details
+- Shopify live verification helper now exists to print tracked SKU state and recent tenant-scoped audit entries after a live order
+- Cloudflare tunnel delivery has been smoke-tested successfully against the local Shopify route
+- Shopify webhook handling now skips malformed line items without `variant_id` instead of returning a 500
 - Recorded ShipHero replay tooling now exists for PO receipt and shipment validation
 
 ## What Is Not Done
 
 ### Highest Priority Gaps
 
-- Shopify webhook flow is validated locally with recorded payload replay, but not yet against live Shopify delivery
 - ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
-- No live third-party delivery validation exists yet for Shopify or ShipHero
+- No live third-party delivery validation exists yet for ShipHero
 
 ### Secondary Gaps
 
@@ -97,7 +101,7 @@ Why this is first:
 
 ### Priority 2: Finish Shopify Inbound Flow
 
-**Status:** Recorded payload replay now succeeds locally and verifies inventory plus audit-log side effects. A tunnel-ready live-validation helper is in place, but live Shopify delivery is still pending.
+**Status:** Complete for the current MVP target. Recorded payload replay succeeds locally and a real Shopify delivery has now been confirmed to mutate the mapped local inventory rows with matching audit-log entries.
 
 **Goal:** Accept a real Shopify event and push it through the local inventory path safely.
 
@@ -108,12 +112,14 @@ Deliverables:
 - [x] Add structured logging around webhook success/failure
 - [x] Add local replay tooling and demo integration seed support
 - [x] Add tunnel-ready live validation helper and runbook
-- [ ] Validate delivery from a live Shopify store or tunnel
+- [x] Fix live-delivery crash caused by Shopify line items with null `variant_id`
+- [x] Validate delivery from a live Shopify store or tunnel
 
 Definition of done:
 
 - A real or replayed Shopify webhook updates local inventory predictably
 - The resulting state can be observed in the dashboard and database
+- Live Shopify test or real-order delivery is confirmed against the mapped store variants, not only placeholder fixture IDs
 
 ### Priority 3: Finish ShipHero Inbound Flow
 
@@ -155,23 +161,28 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Validate live Shopify delivery against a tunnel or partner test store.
-2. Validate live ShipHero delivery against a tunnel or sandbox source.
-3. Add a fuller reconciliation summary view for operators.
-4. Harden webhook failure logging and retry strategy.
-5. Revisit OAuth only if operator onboarding needs exceed email-based auth.
+1. Validate live ShipHero delivery against a tunnel or sandbox source.
+2. Add a fuller reconciliation summary view for operators.
+3. Harden webhook failure logging and retry strategy.
+4. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
-**Best next task:** validate live Shopify delivery against a tunnel or partner test store.
+**Best next task:** validate live ShipHero delivery against a tunnel or sandbox source.
 
 Why:
 
-- Basic auth flow now includes sign-in, tenant assignment, protected routes, and sign-out.
-- The MVP auth direction is now settled on email-based Supabase Auth, which is enough for the current operator workflow.
-- The local operator surface is now in place for inventory controls, audit history, and integration management.
-- Automated route coverage now protects the stabilized local webhook and dashboard flows.
-- The highest remaining product risk is whether real third-party webhook delivery matches the replayed local payloads.
+- Live Shopify delivery has now been confirmed against the mapped local variants with fresh `committed_quantity` and `audit_logs` mutations.
+- Recorded ShipHero flows already pass locally, so live provider delivery is now the biggest unresolved integration risk.
+- The operator surface and audit trail are already in place, which makes warehouse-side validation the clearest next milestone.
+
+Resume checklist:
+
+- Confirm the local app is running with `npm run dev`.
+- Confirm the public tunnel URL used for live delivery is still current.
+- Point the live ShipHero source or sandbox webhook at the active tunnel URL.
+- Deliver a real ShipHero receiving or shipment event.
+- Verify resulting `inventory_items` and `audit_logs` mutations with the existing replay and audit tooling.
 
 ## Open Decisions
 
@@ -185,10 +196,10 @@ Why:
 
 ## Known Risks
 
-- Webhook routes exist before they are fully validated against production-like payloads
+- ShipHero webhooks still exist before they are fully validated against production-like payloads
 - No dead-letter or retry queue means repeated failures can still drop operational events
 - Audit history is visible, but broader operator analytics and reconciliation views are still missing
-- Integration secrets/config can now be managed per tenant in the dashboard, and route coverage exists, but live provider delivery is still unverified
+- Integration secrets/config can now be managed per tenant in the dashboard, and route coverage exists, but live ShipHero delivery is still unverified
 - Dashboard scale behavior is still unknown for large inventories
 
 ## Local Development Notes
@@ -204,6 +215,21 @@ Why:
   - `npm run supabase:env`
   - `npm run supabase:types`
   - `npm test`
+
+## Current Live Shopify State
+
+- Active development store: `microfill-2.myshopify.com`
+- Current tunnel path: Cloudflare quick tunnel, not localtunnel
+- Current tunnel URL during confirmed validation: `https://models-vat-patent-standing.trycloudflare.com`
+- Local mapped variants:
+  - `SKU-DEMO-BLUE` -> product `15287484154022`, variant `56390813515942`
+  - `SKU-DEMO-RED` -> product `15287484252326`, variant `56390813876390`
+- Real Shopify traffic has reached the route during this session
+- The webhook crash on null `variant_id` is fixed and covered by Vitest
+- Latest automated status: `npx vitest run` passed with 14 tests
+- Latest confirmed live Shopify mutation:
+  - `2026-04-18T08:58:40.066194+00:00` `SKU-DEMO-BLUE` `committed_quantity = 4 -> 5`
+  - `2026-04-18T08:58:40.079556+00:00` `SKU-DEMO-RED` `committed_quantity = 8 -> 9`
 
 ## Working Definition Of MVP
 

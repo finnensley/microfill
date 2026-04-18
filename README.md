@@ -64,6 +64,7 @@ The repository is not yet at the full production target above. Today, the local 
 - Protected dashboard integration management for Shopify and ShipHero credentials, webhook secrets, and activation state
 - Dashboard audit history with field-level change summaries for recent inventory mutations
 - Automated Vitest route coverage for the dashboard APIs and webhook handlers
+- Shopify webhook handling is hardened against null `variant_id` line items discovered during live-store testing
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
 
@@ -163,13 +164,15 @@ Use this only when the app is already running locally and a public HTTPS tunnel 
 npm run dev
 ```
 
-2. Start a public HTTPS tunnel to `localhost:3000`:
+2. Start a public HTTPS tunnel to `localhost:3000`.
+
+Current recommendation: use a Cloudflare quick tunnel. Localtunnel was workable for earlier replay tests but proved unstable for repeated live Shopify delivery.
 
 ```bash
-npm run tunnel:shopify
+cloudflared tunnel --url http://localhost:3000
 ```
 
-3. Copy the generated `https://...loca.lt` URL into `SHOPIFY_TUNNEL_URL` in `.env.local`.
+3. Copy the generated public URL into `SHOPIFY_TUNNEL_URL` in `.env.local`.
 4. Set or confirm the live-validation values in `.env.local`:
    `SHOPIFY_LIVE_SHOP_DOMAIN=microfill-2.myshopify.com`, `SHOPIFY_LIVE_SHOP_ID=microfill-2`, `SHOPIFY_TUNNEL_URL`, and a non-empty `SHOPIFY_WEBHOOK_SECRET`.
 5. Map the local validation SKUs to real Shopify product and variant IDs from your development store:
@@ -180,12 +183,44 @@ npm run tunnel:shopify
 npm run webhook:shopify:live:prepare
 ```
 
-7. If you want to smoke-test the public tunnel before touching Shopify, set `SHOPIFY_LIVE_SMOKE_TEST=true` and rerun the same command.
+7. Smoke-test the public tunnel and HMAC secret before touching Shopify:
+
+```bash
+npm run webhook:shopify:live:smoke
+```
+
+This should return a `200` response from `/api/webhooks/shopify`. If it fails, fix the local app, tunnel, or shared secret before retrying Shopify admin deliveries.
+
 8. In Shopify admin for `microfill-2.myshopify.com`, create or update the `orders/create` webhook so it points at `https://your-tunnel-host/api/webhooks/shopify` and uses the same secret as `SHOPIFY_WEBHOOK_SECRET`.
 9. Place a test order containing one of the mapped Shopify variants printed by the prepare script.
-10. Verify the result in the dashboard, then confirm database and audit-log changes with the SQL commands printed by the script.
+10. Verify the result in the dashboard, then confirm database and audit-log changes with:
+
+```bash
+npm run webhook:shopify:live:verify
+```
+
+11. The verifier now also prints the tenant's Shopify integration state, including `last_synced_at` and `last_error`, so you can tell whether Shopify reached the webhook route even when no inventory rows changed.
+12. If you need a narrower audit window after a resend, pass a timestamp filter such as `npm run webhook:shopify:live:verify -- --since=2026-04-18T18:00:00Z`.
 
 The real-ID mapping matters because the local webhook handler matches incoming Shopify line items by `shopify_variant_id`. The seeded demo IDs are placeholders until you replace them with actual IDs from `microfill-2.myshopify.com`.
+
+### Current Shopify Validation State
+
+As of April 18, 2026, live Shopify validation is confirmed for the current MVP path.
+
+- The active development store is `microfill-2.myshopify.com`.
+- The tunnel used during the confirmed live validation was `https://models-vat-patent-standing.trycloudflare.com`.
+- The local demo SKUs are already remapped to real Shopify IDs:
+  - `SKU-DEMO-BLUE` -> product `15287484154022`, variant `56390813515942`
+  - `SKU-DEMO-RED` -> product `15287484252326`, variant `56390813876390`
+- The Shopify webhook route was patched after live traffic exposed a case where `line_items[*].variant_id` can be `null`.
+- Automated verification now passes with 14 Vitest tests, including a regression test for null `variant_id` line items.
+- A real Shopify delivery was confirmed on April 18, 2026 and produced these local mutations:
+  - `SKU-DEMO-BLUE`: `committed_quantity = 4 -> 5`
+  - `SKU-DEMO-RED`: `committed_quantity = 8 -> 9`
+- The live-validation workflow now includes `npm run webhook:shopify:live:verify` so the mapped SKUs and recent tenant-scoped audit entries can be checked without hand-written SQL.
+
+If Shopify's admin-side "Send test" action produces no database change, inspect the delivery payload before assuming the route failed. In this session, synthetic test deliveries sometimes used placeholder or unmatched variant IDs, which correctly resulted in skipped line items instead of inventory mutations.
 
 ## Current Local Auth Flow
 

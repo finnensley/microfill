@@ -17,6 +17,8 @@
     "tunnel:shopify": "lt --port 3000",
     "webhook:replay:shopify": "node scripts/replay-shopify-order.mjs",
     "webhook:shopify:live:prepare": "node scripts/prepare-shopify-live-validation.mjs",
+    "webhook:shopify:live:smoke": "node scripts/smoke-test-shopify-live-webhook.mjs",
+    "webhook:shopify:live:verify": "node scripts/verify-shopify-live-validation.mjs",
     "webhook:replay:shiphero:po": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/po-update.json",
     "webhook:replay:shiphero:shipment": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/shipment-update.json"
   },

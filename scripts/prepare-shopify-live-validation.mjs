@@ -295,6 +295,9 @@ console.log(
   "5. Confirm the resulting committed inventory change in the dashboard and audit history.",
 );
 console.log("");
+console.log("Suggested verification command:");
+console.log("npm run webhook:shopify:live:verify");
+console.log("");
 console.log("Suggested verification SQL:");
 console.log(
   `PGPASSWORD=postgres psql \"postgresql://postgres@127.0.0.1:54321/postgres\" -c \"select sku, total_quantity, committed_quantity, updated_at from public.inventory_items where tenant_id = '${tenantId}' order by sku;\"`,

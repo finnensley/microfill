@@ -6,7 +6,15 @@ import { resolveIntegration } from "@/services/integrations";
 
 type ShopifyWebhookLineItem = {
   quantity: number;
-  variant_id: number | string;
+  variant_id: number | string | null;
+};
+
+type ShopifyLineResult = {
+  inventoryItemId?: string;
+  quantity: number;
+  reason?: string;
+  status: "processed" | "skipped" | "failed";
+  variantId: string | null;
 };
 
 type ShopifyWebhookOrder = {
@@ -14,12 +22,39 @@ type ShopifyWebhookOrder = {
   line_items?: ShopifyWebhookLineItem[];
 };
 
+function summarizeLineResults(lineResults: ShopifyLineResult[]) {
+  return lineResults
+    .map((lineResult) => {
+      const base = `${lineResult.status}:${lineResult.variantId ?? "none"}x${lineResult.quantity}`;
+      return lineResult.reason ? `${base}:${lineResult.reason}` : base;
+    })
+    .join(", ");
+}
+
+function buildWebhookStatusMessage(params: {
+  failed: number;
+  lineResults: ShopifyLineResult[];
+  orderId: number | string;
+  processed: number;
+  skipped: number;
+}) {
+  const summary = `order=${params.orderId} processed=${params.processed} skipped=${params.skipped} failed=${params.failed}`;
+
+  if (params.failed === 0 && params.skipped === 0) {
+    return null;
+  }
+
+  const lineSummary = summarizeLineResults(params.lineResults);
+  return lineSummary ? `${summary} lines=${lineSummary}` : summary;
+}
+
 export async function POST(req: Request) {
   try {
     const supabase = createServerSupabaseClient();
     let processed = 0;
     let skipped = 0;
     let failed = 0;
+    const lineResults: ShopifyLineResult[] = [];
 
     const shopId = req.headers.get("x-shopify-shop-id");
     const shopDomain = req.headers.get("x-shopify-shop-domain");
@@ -53,6 +88,28 @@ export async function POST(req: Request) {
     const resolvedTenantId = integration?.tenant_id ?? tenantHeader ?? shopId;
     const shopifyWebhookSecret =
       integration?.webhook_secret ?? getShopifyWebhookSecret();
+    const persistIntegrationStatus = async (lastError: string | null) => {
+      if (!integration?.id) {
+        return;
+      }
+
+      const { error } = await supabase
+        .from("integrations")
+        .update({
+          last_error: lastError,
+          last_synced_at: new Date().toISOString(),
+        })
+        .eq("id", integration.id)
+        .eq("tenant_id", integration.tenant_id);
+
+      if (error) {
+        console.error("Unable to persist Shopify integration status", {
+          error: error.message,
+          integrationId: integration.id,
+          tenantId: integration.tenant_id,
+        });
+      }
+    };
 
     if (!resolvedTenantId) {
       console.error("Unable to resolve tenant for Shopify webhook");
@@ -75,6 +132,9 @@ export async function POST(req: Request) {
 
     // 4. Security Check: Compare hashes
     if (!isSignatureValid) {
+      await persistIntegrationStatus(
+        `Invalid Shopify webhook signature for ${shopDomain ?? shopId ?? resolvedTenantId}`,
+      );
       console.error("Invalid Shopify webhook signature", {
         tenantId: resolvedTenantId,
         shopId,
@@ -91,14 +151,44 @@ export async function POST(req: Request) {
     const { line_items, id: orderId } = body;
 
     if (!line_items || line_items.length === 0) {
+      await persistIntegrationStatus(null);
       return NextResponse.json(
-        { received: true, verified: true, processed, skipped, failed },
+        {
+          failed,
+          lineResults,
+          processed,
+          received: true,
+          skipped,
+          verified: true,
+        },
         { status: 200 },
       );
     }
 
     // Process each item in the Shopify order
     for (const item of line_items) {
+      if (
+        item.variant_id === null ||
+        item.variant_id === undefined ||
+        item.variant_id === ""
+      ) {
+        console.warn("Skipping Shopify line item without a variant ID", {
+          orderId,
+          quantity: item.quantity,
+          shopDomain,
+          shopId,
+          tenantId: resolvedTenantId,
+        });
+        lineResults.push({
+          quantity: item.quantity,
+          reason: "missing_variant_id",
+          status: "skipped",
+          variantId: null,
+        });
+        skipped++;
+        continue;
+      }
+
       const variantId = item.variant_id.toString();
       const quantitySold = item.quantity;
 
@@ -114,6 +204,12 @@ export async function POST(req: Request) {
         console.warn(
           `Inventory item not found for tenant ${resolvedTenantId} variant ${variantId}`,
         );
+        lineResults.push({
+          quantity: quantitySold,
+          reason: "inventory_item_not_found",
+          status: "skipped",
+          variantId,
+        });
         skipped++;
         continue;
       }
@@ -132,14 +228,28 @@ export async function POST(req: Request) {
 
       if (syncError) {
         console.error(`Error syncing variant ${variantId}:`, syncError);
+        lineResults.push({
+          inventoryItemId: inventoryItem.id,
+          quantity: quantitySold,
+          reason: syncError.message,
+          status: "failed",
+          variantId,
+        });
         failed++;
         continue;
       }
 
+      lineResults.push({
+        inventoryItemId: inventoryItem.id,
+        quantity: quantitySold,
+        status: "processed",
+        variantId,
+      });
       processed++;
     }
 
     console.info("Processed Shopify webhook", {
+      lineResults,
       tenantId: resolvedTenantId,
       shopId,
       shopDomain,
@@ -149,8 +259,26 @@ export async function POST(req: Request) {
       failed,
     });
 
+    await persistIntegrationStatus(
+      buildWebhookStatusMessage({
+        failed,
+        lineResults,
+        orderId,
+        processed,
+        skipped,
+      }),
+    );
+
     return NextResponse.json(
-      { received: true, verified: true, orderId, processed, skipped, failed },
+      {
+        failed,
+        lineResults,
+        orderId,
+        processed,
+        received: true,
+        skipped,
+        verified: true,
+      },
       { status: 200 },
     );
   } catch (err) {
