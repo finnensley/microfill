@@ -40,13 +40,25 @@ function normalizeShopDomain(value?: string) {
   return normalized ? normalized.toLowerCase() : null;
 }
 
-async function getResolvedTenantId(req: Request) {
+type ResolvedTenantResult =
+  | {
+      ok: true;
+      tenantId: string;
+    }
+  | {
+      ok: false;
+      response: NextResponse<{ error: string }>;
+    };
+
+async function getResolvedTenantId(
+  req: Request,
+): Promise<ResolvedTenantResult> {
   const user = await getAuthenticatedUser();
 
   if (!user) {
     return {
-      error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
-      tenantId: null,
+      ok: false,
+      response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }),
     };
   }
 
@@ -54,14 +66,14 @@ async function getResolvedTenantId(req: Request) {
 
   if (!resolvedTenantId) {
     return {
-      error: NextResponse.json(
+      ok: false,
+      response: NextResponse.json(
         {
           error:
             "No tenant is configured for this user. Complete onboarding or assign app_metadata.tenant_id for the user.",
         },
         { status: 409 },
       ),
-      tenantId: null,
     };
   }
 
@@ -70,22 +82,25 @@ async function getResolvedTenantId(req: Request) {
 
   if (requestedTenantId && requestedTenantId !== resolvedTenantId) {
     return {
-      error: NextResponse.json(
+      ok: false,
+      response: NextResponse.json(
         { error: "Requested tenant does not match the signed-in user." },
         { status: 403 },
       ),
-      tenantId: null,
     };
   }
 
-  return { error: null, tenantId: resolvedTenantId };
+  return {
+    ok: true,
+    tenantId: resolvedTenantId,
+  };
 }
 
 export async function GET(req: Request) {
   const tenantResult = await getResolvedTenantId(req);
 
-  if (tenantResult.error || !tenantResult.tenantId) {
-    return tenantResult.error;
+  if (!tenantResult.ok) {
+    return tenantResult.response;
   }
 
   const supabase = createServerSupabaseClient();
@@ -109,8 +124,8 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const tenantResult = await getResolvedTenantId(req);
 
-  if (tenantResult.error || !tenantResult.tenantId) {
-    return tenantResult.error;
+  if (!tenantResult.ok) {
+    return tenantResult.response;
   }
 
   const body = (await req.json()) as IntegrationUpdateBody;

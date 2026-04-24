@@ -488,10 +488,12 @@ export default function InventoryDashboard({
         throw new Error(payload.error || "Unable to save inventory changes.");
       }
 
-      if (payload.item) {
+      const updatedItem = payload.item;
+
+      if (updatedItem) {
         setDrafts((currentDrafts) => ({
           ...currentDrafts,
-          [payload.item.id]: createDraftState(payload.item),
+          [updatedItem.id]: createDraftState(updatedItem),
         }));
       }
 
