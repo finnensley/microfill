@@ -401,6 +401,13 @@ describe("webhook routes", () => {
     expect(response.status).toBe(401);
     expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        config: expect.objectContaining({
+          shipheroWebhookStatus: expect.objectContaining({
+            failureKind: "invalid_signature",
+            retryMode: "fix_configuration",
+            retryRecommended: false,
+          }),
+        }),
         last_error: "Invalid ShipHero webhook signature for tenant-1",
         last_synced_at: expect.any(String),
       }),
@@ -473,6 +480,13 @@ describe("webhook routes", () => {
     ]);
     expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        config: expect.objectContaining({
+          shipheroWebhookStatus: expect.objectContaining({
+            failureKind: "success",
+            retryMode: "none",
+            retryRecommended: false,
+          }),
+        }),
         last_error: null,
         last_synced_at: expect.any(String),
       }),
@@ -483,7 +497,86 @@ describe("webhook routes", () => {
       lineItems: 2,
       message: "PO synced",
       po_number: "PO-101",
+      retryStrategy: {
+        operatorAction:
+          "No retry required. The PO update applied successfully.",
+        retryCommand: null,
+        retryMode: "none",
+        retryRecommended: false,
+      },
       succeeded: 2,
+      tenantId: "tenant-1",
+      verified: true,
+      webhookType: "PO Update",
+    });
+  });
+
+  it("persists explicit retry guidance when a ShipHero PO update partially fails", async () => {
+    const payload = {
+      webhook_type: "PO Update",
+      po_number: "PO-RETRY-1",
+      line_items: [{ sku: "SKU-1", quantity_received: 3 }],
+    };
+    const rawBody = JSON.stringify(payload);
+    const secret = "shiphero-secret";
+    const signature = crypto
+      .createHmac("sha256", secret)
+      .update(rawBody, "utf8")
+      .digest("base64");
+
+    const shipHeroClient = createIntegrationStatusSupabaseClient();
+
+    mockResolveIntegration.mockResolvedValue({
+      config: {},
+      id: "integration-shiphero-1",
+      tenant_id: "tenant-1",
+      webhook_secret: secret,
+    });
+    mockProcessSyncEventsBatch.mockResolvedValue({ failed: 1, succeeded: 0 });
+
+    mockCreateServerSupabaseClient.mockReturnValue(shipHeroClient.supabase);
+
+    const response = await POST_SHIPHERO(
+      new Request("http://localhost/api/webhooks/shiphero", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-shiphero-account-id": "warehouse-1",
+          "x-shiphero-hmac-sha256": signature,
+        },
+        body: rawBody,
+      }),
+    );
+
+    expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          shipheroWebhookStatus: expect.objectContaining({
+            failureKind: "partial_failure",
+            lastError:
+              "type=PO Update external_id=PO-RETRY-1 line_items=1 succeeded=0 failed=1",
+            retryCommand: "npm run webhook:replay:shiphero:po",
+            retryMode: "provider_retry",
+            retryRecommended: true,
+          }),
+        }),
+        last_error:
+          "type=PO Update external_id=PO-RETRY-1 line_items=1 succeeded=0 failed=1",
+      }),
+    );
+    await expect(response.json()).resolves.toEqual({
+      failed: 1,
+      lineItems: 1,
+      message: "PO synced",
+      po_number: "PO-RETRY-1",
+      retryStrategy: {
+        operatorAction:
+          "Review the latest ShipHero integration error, confirm SKU mappings and credentials, then replay the PO fixture if the provider does not retry automatically.",
+        retryCommand: "npm run webhook:replay:shiphero:po",
+        retryMode: "provider_retry",
+        retryRecommended: true,
+      },
+      succeeded: 0,
       tenantId: "tenant-1",
       verified: true,
       webhookType: "PO Update",
@@ -598,6 +691,13 @@ describe("webhook routes", () => {
     ]);
     expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
       expect.objectContaining({
+        config: expect.objectContaining({
+          shipheroWebhookStatus: expect.objectContaining({
+            failureKind: "success",
+            retryMode: "none",
+            retryRecommended: false,
+          }),
+        }),
         last_error: null,
         last_synced_at: expect.any(String),
       }),
@@ -607,6 +707,13 @@ describe("webhook routes", () => {
       failed: 0,
       lineItems: 1,
       message: "Shipment synced",
+      retryStrategy: {
+        operatorAction:
+          "No retry required. The shipment update applied successfully.",
+        retryCommand: null,
+        retryMode: "none",
+        retryRecommended: false,
+      },
       succeeded: 1,
       tenantId: "tenant-1",
       tracking: "TRACK-123",

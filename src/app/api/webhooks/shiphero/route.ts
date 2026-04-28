@@ -14,12 +14,43 @@ import {
   InventoryEvent,
 } from "@/services/inventory-sync";
 
-type PersistIntegrationStatus = (lastError: string | null) => Promise<void>;
+type PersistIntegrationStatusParams = {
+  externalId?: string | null;
+  failed?: number;
+  failureKind?:
+    | "internal_error"
+    | "invalid_signature"
+    | "no_items"
+    | "partial_failure"
+    | "success"
+    | "unsupported_type";
+  lastError: string | null;
+  lastResult: "failed" | "ignored" | "partial" | "succeeded";
+  lineItems?: number;
+  operatorAction: string;
+  retryCommand?: string | null;
+  retryMode: "fix_configuration" | "manual_review" | "provider_retry" | "none";
+  retryRecommended: boolean;
+  succeeded?: number;
+  webhookType?: string | null;
+};
+
+type PersistIntegrationStatus = (
+  params: PersistIntegrationStatusParams,
+) => Promise<void>;
 type ShipHeroWebhookBody =
   | ShipHeroPOUpdate
   | ShipHeroPOUpdateEnvelope
   | ShipHeroShipmentUpdate
   | ShipHeroShipmentUpdateEnvelope;
+
+function normalizeIntegrationConfig(config: unknown) {
+  if (!config || typeof config !== "object" || Array.isArray(config)) {
+    return {} as Record<string, unknown>;
+  }
+
+  return config as Record<string, unknown>;
+}
 
 function normalizeShipHeroWebhookBody(body: ShipHeroWebhookBody) {
   const purchaseOrder =
@@ -33,6 +64,9 @@ function normalizeShipHeroWebhookBody(body: ShipHeroWebhookBody) {
   return {
     purchaseOrder,
     fulfillment,
+    externalId: purchaseOrder?.po_number ?? fulfillment?.order_number ?? null,
+    lineItems:
+      purchaseOrder?.line_items.length ?? fulfillment?.line_items.length ?? 0,
     webhookType,
     warehouseId:
       purchaseOrder?.warehouse_id ?? fulfillment?.warehouse_id ?? undefined,
@@ -51,6 +85,18 @@ function buildWebhookStatusMessage(params: {
   }
 
   return `type=${params.webhookType} external_id=${params.externalId} line_items=${params.lineItems} succeeded=${params.succeeded} failed=${params.failed}`;
+}
+
+function getReplayCommand(webhookType?: string | null) {
+  if (webhookType === "PO Update") {
+    return "npm run webhook:replay:shiphero:po";
+  }
+
+  if (webhookType === "Shipment Update") {
+    return "npm run webhook:replay:shiphero:shipment";
+  }
+
+  return null;
 }
 
 export function HEAD() {
@@ -95,16 +141,37 @@ export async function POST(req: Request) {
     });
 
     const persistIntegrationStatus: PersistIntegrationStatus = async (
-      lastError,
+      params,
     ) => {
       if (!integration?.id) {
         return;
       }
 
+      const currentConfig = normalizeIntegrationConfig(integration.config);
+      const nextConfig = {
+        ...currentConfig,
+        shipheroWebhookStatus: {
+          externalId: params.externalId ?? null,
+          failed: params.failed ?? 0,
+          failureKind: params.failureKind ?? null,
+          lastAttemptAt: new Date().toISOString(),
+          lastError: params.lastError,
+          lastResult: params.lastResult,
+          lastWebhookType: params.webhookType ?? null,
+          lineItems: params.lineItems ?? 0,
+          operatorAction: params.operatorAction,
+          retryCommand: params.retryCommand ?? null,
+          retryMode: params.retryMode,
+          retryRecommended: params.retryRecommended,
+          succeeded: params.succeeded ?? 0,
+        },
+      };
+
       const { error } = await supabase
         .from("integrations")
         .update({
-          last_error: lastError,
+          config: nextConfig,
+          last_error: params.lastError,
           last_synced_at: new Date().toISOString(),
         })
         .eq("id", integration.id)
@@ -145,9 +212,21 @@ export async function POST(req: Request) {
 
     // 4. Security Check: Compare hashes
     if (!isSignatureValid) {
-      await persistIntegrationStatus(
-        `Invalid ShipHero webhook signature for ${shipHeroAccountId ?? resolvedTenantId}`,
-      );
+      await persistIntegrationStatus({
+        externalId: normalizedBody.externalId,
+        failed: 1,
+        failureKind: "invalid_signature",
+        lastError: `Invalid ShipHero webhook signature for ${shipHeroAccountId ?? resolvedTenantId}`,
+        lastResult: "failed",
+        lineItems: normalizedBody.lineItems,
+        operatorAction:
+          "Confirm the ShipHero webhook secret and account ID match the provider, then rerun the ShipHero smoke test before replaying the event.",
+        retryCommand: getReplayCommand(normalizedBody.webhookType),
+        retryMode: "fix_configuration",
+        retryRecommended: false,
+        succeeded: 0,
+        webhookType: normalizedBody.webhookType,
+      });
       console.error("Invalid ShipHero webhook signature", {
         tenantId: resolvedTenantId,
         shipHeroAccountId,
@@ -176,11 +255,39 @@ export async function POST(req: Request) {
       );
     }
 
-    await persistIntegrationStatus(null);
+    await persistIntegrationStatus({
+      externalId: normalizedBody.externalId,
+      failed: 0,
+      failureKind: "unsupported_type",
+      lastError: `Unsupported ShipHero webhook type: ${normalizedBody.webhookType ?? "unknown"}`,
+      lastResult: "ignored",
+      lineItems: normalizedBody.lineItems,
+      operatorAction:
+        "No retry is required unless this webhook type should be supported by the application.",
+      retryCommand: null,
+      retryMode: "manual_review",
+      retryRecommended: false,
+      succeeded: 0,
+      webhookType: normalizedBody.webhookType,
+    });
+
+    console.warn("ShipHero webhook type not handled", {
+      externalId: normalizedBody.externalId,
+      lineItems: normalizedBody.lineItems,
+      tenantId: resolvedTenantId,
+      webhookType: normalizedBody.webhookType,
+    });
 
     return NextResponse.json(
       {
         message: "Webhook type not handled",
+        retryStrategy: {
+          operatorAction:
+            "No retry is required unless this webhook type should be supported by the application.",
+          retryCommand: null,
+          retryMode: "manual_review",
+          retryRecommended: false,
+        },
         verified: true,
         webhookType: normalizedBody.webhookType,
       },
@@ -205,7 +312,21 @@ async function handlePOUpdate(
   shipHeroAccountId?: string | null,
 ) {
   if (!body.line_items || body.line_items.length === 0) {
-    await persistIntegrationStatus(null);
+    await persistIntegrationStatus({
+      externalId: body.po_number,
+      failed: 0,
+      failureKind: "no_items",
+      lastError: null,
+      lastResult: "ignored",
+      lineItems: 0,
+      operatorAction:
+        "No retry is required because the webhook did not include any PO line items.",
+      retryCommand: null,
+      retryMode: "none",
+      retryRecommended: false,
+      succeeded: 0,
+      webhookType: body.webhook_type,
+    });
     return NextResponse.json(
       {
         message: "No items to process",
@@ -238,20 +359,57 @@ async function handlePOUpdate(
     ...result,
   });
 
-  await persistIntegrationStatus(
-    buildWebhookStatusMessage({
-      externalId: body.po_number,
-      failed: result.failed,
-      lineItems: body.line_items.length,
-      succeeded: result.succeeded,
-      webhookType: body.webhook_type,
-    }),
-  );
+  const lastError = buildWebhookStatusMessage({
+    externalId: body.po_number,
+    failed: result.failed,
+    lineItems: body.line_items.length,
+    succeeded: result.succeeded,
+    webhookType: body.webhook_type,
+  });
+
+  if (result.failed > 0) {
+    console.error("ShipHero PO webhook had failed inventory sync events", {
+      tenantId,
+      shipHeroAccountId: shipHeroAccountId ?? null,
+      poNumber: body.po_number,
+      retryCommand: getReplayCommand(body.webhook_type),
+      ...result,
+    });
+  }
+
+  await persistIntegrationStatus({
+    externalId: body.po_number,
+    failed: result.failed,
+    failureKind: result.failed > 0 ? "partial_failure" : "success",
+    lastError,
+    lastResult: result.failed > 0 ? "partial" : "succeeded",
+    lineItems: body.line_items.length,
+    operatorAction:
+      result.failed > 0
+        ? "Review the latest ShipHero integration error, confirm SKU mappings and credentials, then replay the PO fixture if the provider does not retry automatically."
+        : "No retry required. The PO update applied successfully.",
+    retryCommand:
+      result.failed > 0 ? getReplayCommand(body.webhook_type) : null,
+    retryMode: result.failed > 0 ? "provider_retry" : "none",
+    retryRecommended: result.failed > 0,
+    succeeded: result.succeeded,
+    webhookType: body.webhook_type,
+  });
 
   return NextResponse.json(
     {
       message: "PO synced",
       verified: true,
+      retryStrategy: {
+        operatorAction:
+          result.failed > 0
+            ? "Review the latest ShipHero integration error, confirm SKU mappings and credentials, then replay the PO fixture if the provider does not retry automatically."
+            : "No retry required. The PO update applied successfully.",
+        retryCommand:
+          result.failed > 0 ? getReplayCommand(body.webhook_type) : null,
+        retryMode: result.failed > 0 ? "provider_retry" : "none",
+        retryRecommended: result.failed > 0,
+      },
       tenantId,
       webhookType: body.webhook_type,
       lineItems: body.line_items.length,
@@ -272,7 +430,21 @@ async function handleShipmentUpdate(
   shipHeroAccountId?: string | null,
 ) {
   if (!body.line_items || body.line_items.length === 0) {
-    await persistIntegrationStatus(null);
+    await persistIntegrationStatus({
+      externalId: body.order_number,
+      failed: 0,
+      failureKind: "no_items",
+      lastError: null,
+      lastResult: "ignored",
+      lineItems: 0,
+      operatorAction:
+        "No retry is required because the webhook did not include any shipment line items.",
+      retryCommand: null,
+      retryMode: "none",
+      retryRecommended: false,
+      succeeded: 0,
+      webhookType: body.webhook_type,
+    });
     return NextResponse.json(
       {
         message: "No items to process",
@@ -306,20 +478,60 @@ async function handleShipmentUpdate(
     ...result,
   });
 
-  await persistIntegrationStatus(
-    buildWebhookStatusMessage({
-      externalId: body.order_number,
-      failed: result.failed,
-      lineItems: body.line_items.length,
-      succeeded: result.succeeded,
-      webhookType: body.webhook_type,
-    }),
-  );
+  const lastError = buildWebhookStatusMessage({
+    externalId: body.order_number,
+    failed: result.failed,
+    lineItems: body.line_items.length,
+    succeeded: result.succeeded,
+    webhookType: body.webhook_type,
+  });
+
+  if (result.failed > 0) {
+    console.error(
+      "ShipHero shipment webhook had failed inventory sync events",
+      {
+        tenantId,
+        shipHeroAccountId: shipHeroAccountId ?? null,
+        orderNumber: body.order_number,
+        retryCommand: getReplayCommand(body.webhook_type),
+        ...result,
+      },
+    );
+  }
+
+  await persistIntegrationStatus({
+    externalId: body.order_number,
+    failed: result.failed,
+    failureKind: result.failed > 0 ? "partial_failure" : "success",
+    lastError,
+    lastResult: result.failed > 0 ? "partial" : "succeeded",
+    lineItems: body.line_items.length,
+    operatorAction:
+      result.failed > 0
+        ? "Review the latest ShipHero integration error, confirm SKU mappings and credentials, then replay the shipment fixture if the provider does not retry automatically."
+        : "No retry required. The shipment update applied successfully.",
+    retryCommand:
+      result.failed > 0 ? getReplayCommand(body.webhook_type) : null,
+    retryMode: result.failed > 0 ? "provider_retry" : "none",
+    retryRecommended: result.failed > 0,
+    succeeded: result.succeeded,
+    webhookType: body.webhook_type,
+  });
 
   return NextResponse.json(
     {
       message: "Shipment synced",
       verified: true,
+      retryStrategy: {
+        operatorAction:
+          result.failed > 0
+            ? "Review the latest ShipHero integration error, confirm SKU mappings and credentials, then replay the shipment fixture if the provider does not retry automatically."
+            : "No retry required. The shipment update applied successfully.",
+        retryCommand:
+          result.failed > 0 ? getReplayCommand(body.webhook_type) : null,
+        retryMode: result.failed > 0 ? "provider_retry" : "none",
+        retryRecommended: result.failed > 0,
+      },
       tenantId,
       webhookType: body.webhook_type,
       lineItems: body.line_items.length,

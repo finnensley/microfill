@@ -12,6 +12,8 @@ interface InventoryDashboardProps {
   tenantId: string | null;
 }
 
+type AuditHistoryFilter = "all" | "exceptions" | "operator" | "syncs";
+
 type DraftItemState = {
   flashModeEnabled: boolean;
   safetyFloorPercent: string;
@@ -26,6 +28,21 @@ type IntegrationDraftState = {
   externalShopDomain: string;
   status: "draft" | "active" | "disabled" | "error";
   webhookSecret: string;
+};
+
+type ShipHeroWebhookStatus = {
+  failed: number;
+  failureKind: string | null;
+  lastAttemptAt: string | null;
+  lastError: string | null;
+  lastResult: string | null;
+  lastWebhookType: string | null;
+  lineItems: number;
+  operatorAction: string | null;
+  retryCommand: string | null;
+  retryMode: string | null;
+  retryRecommended: boolean;
+  succeeded: number;
 };
 
 function createIntegrationDraft(
@@ -114,6 +131,52 @@ function formatPercent(value: number) {
   return `${Math.round(value * 100)}%`;
 }
 
+function readObject(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readNumber(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function readBoolean(value: unknown) {
+  return typeof value === "boolean" ? value : false;
+}
+
+function getShipHeroWebhookStatus(
+  integration?: ManagedIntegrationRecord | null,
+): ShipHeroWebhookStatus | null {
+  const config = readObject(integration?.config);
+  const status = readObject(config?.shipheroWebhookStatus);
+
+  if (!status) {
+    return null;
+  }
+
+  return {
+    failed: readNumber(status.failed),
+    failureKind: readString(status.failureKind),
+    lastAttemptAt: readString(status.lastAttemptAt),
+    lastError: readString(status.lastError),
+    lastResult: readString(status.lastResult),
+    lastWebhookType: readString(status.lastWebhookType),
+    lineItems: readNumber(status.lineItems),
+    operatorAction: readString(status.operatorAction),
+    retryCommand: readString(status.retryCommand),
+    retryMode: readString(status.retryMode),
+    retryRecommended: readBoolean(status.retryRecommended),
+    succeeded: readNumber(status.succeeded),
+  };
+}
+
 export default function InventoryDashboard({
   tenantId,
 }: InventoryDashboardProps) {
@@ -128,6 +191,8 @@ export default function InventoryDashboard({
     null,
   );
   const [auditHistory, setAuditHistory] = useState<InventoryAuditEntry[]>([]);
+  const [auditDisplayLimit, setAuditDisplayLimit] = useState<12 | 25 | 50>(25);
+  const [auditFilter, setAuditFilter] = useState<AuditHistoryFilter>("all");
   const [auditLoading, setAuditLoading] = useState(true);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<ManagedIntegrationRecord[]>(
@@ -237,7 +302,7 @@ export default function InventoryDashboard({
     try {
       setAuditLoading(true);
       const response = await fetch(
-        `/api/inventory/audit?tenantId=${encodeURIComponent(tenantId)}&limit=12`,
+        `/api/inventory/audit?tenantId=${encodeURIComponent(tenantId)}&limit=50`,
       );
       const responseText = await response.text();
       const payload = (responseText ? JSON.parse(responseText) : {}) as {
@@ -290,14 +355,27 @@ export default function InventoryDashboard({
   const filteredAuditHistory = useMemo(() => {
     const normalizedSearch = searchTerm.trim().toLowerCase();
 
-    if (!normalizedSearch) {
-      return auditHistory;
-    }
-
     return auditHistory.filter((entry) => {
       const changeSummary = summarizeAuditChanges(entry)
         .join(" ")
         .toLowerCase();
+      const matchingItem = items.find(
+        (item) => item.id === entry.inventory_item_id,
+      );
+      const isSyncEntry =
+        entry.source === "shiphero" || entry.source === "shopify";
+      const isOperatorEntry =
+        Boolean(entry.actor_user_id) ||
+        (Boolean(entry.actor_role) && entry.actor_role !== "database_trigger");
+      const isExceptionEntry = Boolean(
+        entry.source === "shiphero" ||
+        (matchingItem &&
+          (matchingItem.flash_mode_enabled ||
+            matchingItem.total_quantity -
+              matchingItem.committed_quantity -
+              matchingItem.safety_floor_quantity <=
+              0)),
+      );
       const haystacks = [
         entry.itemLabel,
         entry.itemProductId,
@@ -307,11 +385,36 @@ export default function InventoryDashboard({
         changeSummary,
       ];
 
-      return haystacks.some((value) =>
-        value?.toLowerCase().includes(normalizedSearch),
-      );
+      const matchesSearch = normalizedSearch
+        ? haystacks.some((value) =>
+            value?.toLowerCase().includes(normalizedSearch),
+          )
+        : true;
+
+      if (!matchesSearch) {
+        return false;
+      }
+
+      if (auditFilter === "syncs") {
+        return isSyncEntry;
+      }
+
+      if (auditFilter === "operator") {
+        return isOperatorEntry;
+      }
+
+      if (auditFilter === "exceptions") {
+        return isExceptionEntry;
+      }
+
+      return true;
     });
-  }, [auditHistory, searchTerm]);
+  }, [auditFilter, auditHistory, items, searchTerm]);
+
+  const visibleAuditHistory = useMemo(
+    () => filteredAuditHistory.slice(0, auditDisplayLimit),
+    [auditDisplayLimit, filteredAuditHistory],
+  );
 
   const integrationCards = useMemo(
     () =>
@@ -320,6 +423,14 @@ export default function InventoryDashboard({
         integration:
           integrations.find((candidate) => candidate.provider === provider) ??
           null,
+        shipheroWebhookStatus:
+          provider === "shiphero"
+            ? getShipHeroWebhookStatus(
+                integrations.find(
+                  (candidate) => candidate.provider === provider,
+                ) ?? null,
+              )
+            : null,
         provider,
       })),
     [integrationDrafts, integrations],
@@ -380,6 +491,59 @@ export default function InventoryDashboard({
       recentSyncActivity,
     };
   }, [auditHistory, items]);
+
+  const shipheroRecoveryStatus = useMemo(
+    () =>
+      getShipHeroWebhookStatus(
+        integrations.find((candidate) => candidate.provider === "shiphero") ??
+          null,
+      ),
+    [integrations],
+  );
+
+  const exceptionHighlights = useMemo(() => {
+    const highlights = [] as Array<{
+      body: string;
+      eyebrow: string;
+      footer: string | null;
+      title: string;
+      tone: "amber" | "slate";
+    }>;
+
+    if (
+      shipheroRecoveryStatus?.lastResult ||
+      shipheroRecoveryStatus?.lastError
+    ) {
+      highlights.push({
+        body:
+          shipheroRecoveryStatus.lastError ??
+          shipheroRecoveryStatus.operatorAction ??
+          "ShipHero webhook state is available for review.",
+        eyebrow: "ShipHero recovery",
+        footer: shipheroRecoveryStatus.retryCommand
+          ? `Suggested replay: ${shipheroRecoveryStatus.retryCommand}`
+          : shipheroRecoveryStatus.operatorAction,
+        title: shipheroRecoveryStatus.retryRecommended
+          ? "Warehouse sync needs follow-up"
+          : "Latest warehouse sync is stable",
+        tone: shipheroRecoveryStatus.retryRecommended ? "amber" : "slate",
+      });
+    }
+
+    for (const summary of reconciliationSnapshot.attentionItems.slice(0, 2)) {
+      highlights.push({
+        body: `${summary.item.sku ?? summary.item.shopify_product_id} has ${summary.availableToSell} units available after commitments and floor protection.`,
+        eyebrow: "Inventory exception",
+        footer: `Commitment load ${formatPercent(summary.commitmentRatio)}. Flash mode ${summary.item.flash_mode_enabled ? "on" : "off"}.`,
+        title: summary.item.flash_mode_enabled
+          ? "Flash mode item still needs review"
+          : "Low sellable buffer",
+        tone: "amber",
+      });
+    }
+
+    return highlights.slice(0, 3);
+  }, [reconciliationSnapshot.attentionItems, shipheroRecoveryStatus]);
 
   function updateDraft(
     itemId: string,
@@ -668,200 +832,243 @@ export default function InventoryDashboard({
 
         {!integrationLoading && !integrationError ? (
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
-            {integrationCards.map(({ provider, integration, draft }) => {
-              const title = provider === "shopify" ? "Shopify" : "ShipHero";
+            {integrationCards.map(
+              ({ provider, integration, draft, shipheroWebhookStatus }) => {
+                const title = provider === "shopify" ? "Shopify" : "ShipHero";
 
-              return (
-                <div
-                  key={provider}
-                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
-                >
-                  <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">
-                        {title}
-                      </h3>
-                      <p className="text-sm text-slate-600">
-                        {provider === "shopify"
-                          ? "Manage storefront webhook identity and shared secrets."
-                          : "Manage warehouse webhook identity and API credentials."}
-                      </p>
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      <p>Status: {integration?.status ?? "draft"}</p>
-                      <p>
-                        Last synced:{" "}
-                        {integration?.last_synced_at
-                          ? new Date(
-                              integration.last_synced_at,
-                            ).toLocaleString()
-                          : "Never"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {integration?.last_error ? (
-                    <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-                      Last error: {integration.last_error}
-                    </div>
-                  ) : null}
-
-                  <form
-                    className="mt-4 grid gap-3"
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      void saveIntegration(provider);
-                    }}
+                return (
+                  <div
+                    key={provider}
+                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
                   >
-                    <label className="flex flex-col gap-1 text-sm text-slate-700">
-                      Display name
-                      <input
-                        value={draft.displayName}
-                        onChange={(event) =>
-                          updateIntegrationDraft(
-                            provider,
-                            "displayName",
-                            event.target.value,
-                          )
-                        }
-                        placeholder={`${title} connection`}
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                      />
-                    </label>
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <h3 className="text-base font-semibold text-slate-900">
+                          {title}
+                        </h3>
+                        <p className="text-sm text-slate-600">
+                          {provider === "shopify"
+                            ? "Manage storefront webhook identity and shared secrets."
+                            : "Manage warehouse webhook identity and API credentials."}
+                        </p>
+                      </div>
+                      <div className="text-xs text-slate-500">
+                        <p>Status: {integration?.status ?? "draft"}</p>
+                        <p>
+                          Last synced:{" "}
+                          {integration?.last_synced_at
+                            ? new Date(
+                                integration.last_synced_at,
+                              ).toLocaleString()
+                            : "Never"}
+                        </p>
+                      </div>
+                    </div>
 
-                    <label className="flex flex-col gap-1 text-sm text-slate-700">
-                      Status
-                      <select
-                        value={draft.status}
-                        onChange={(event) =>
-                          updateIntegrationDraft(
-                            provider,
-                            "status",
-                            event.target.value,
-                          )
-                        }
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                      >
-                        <option value="draft">Draft</option>
-                        <option value="active">Active</option>
-                        <option value="disabled">Disabled</option>
-                        <option value="error">Error</option>
-                      </select>
-                    </label>
+                    {integration?.last_error ? (
+                      <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+                        Last error: {integration.last_error}
+                      </div>
+                    ) : null}
 
-                    <label className="flex flex-col gap-1 text-sm text-slate-700">
-                      {provider === "shopify"
-                        ? "Shop domain"
-                        : "External account ID"}
-                      <input
-                        value={
-                          provider === "shopify"
-                            ? draft.externalShopDomain
-                            : draft.externalAccountId
-                        }
-                        onChange={(event) =>
-                          updateIntegrationDraft(
-                            provider,
-                            provider === "shopify"
-                              ? "externalShopDomain"
-                              : "externalAccountId",
-                            event.target.value,
-                          )
-                        }
-                        placeholder={
-                          provider === "shopify"
-                            ? "demo-shop.myshopify.com"
-                            : "demo-shiphero-account"
-                        }
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                      />
-                    </label>
+                    {provider === "shiphero" && shipheroWebhookStatus ? (
+                      <div className="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
+                        <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="font-semibold text-slate-900">
+                              Webhook recovery plan
+                            </p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                              {shipheroWebhookStatus.lastResult ?? "Unknown"}{" "}
+                              {shipheroWebhookStatus.lastWebhookType ??
+                                "ShipHero webhook"}
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {shipheroWebhookStatus.lastAttemptAt
+                              ? new Date(
+                                  shipheroWebhookStatus.lastAttemptAt,
+                                ).toLocaleString()
+                              : "No webhook attempts recorded yet"}
+                          </p>
+                        </div>
 
-                    {provider === "shopify" ? (
+                        <div className="mt-3 grid gap-1 text-sm">
+                          <p>
+                            Outcome: {shipheroWebhookStatus.succeeded} succeeded
+                            / {shipheroWebhookStatus.failed} failed across{" "}
+                            {shipheroWebhookStatus.lineItems} line items.
+                          </p>
+                          {shipheroWebhookStatus.operatorAction ? (
+                            <p>{shipheroWebhookStatus.operatorAction}</p>
+                          ) : null}
+                          {shipheroWebhookStatus.retryCommand ? (
+                            <p>
+                              Replay command:{" "}
+                              {shipheroWebhookStatus.retryCommand}
+                            </p>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <form
+                      className="mt-4 grid gap-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void saveIntegration(provider);
+                      }}
+                    >
                       <label className="flex flex-col gap-1 text-sm text-slate-700">
-                        External account ID
+                        Display name
                         <input
-                          value={draft.externalAccountId}
+                          value={draft.displayName}
                           onChange={(event) =>
                             updateIntegrationDraft(
                               provider,
-                              "externalAccountId",
+                              "displayName",
                               event.target.value,
                             )
                           }
-                          placeholder="demo-shop"
+                          placeholder={`${title} connection`}
                           className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
                         />
                       </label>
-                    ) : null}
 
-                    <label className="flex flex-col gap-1 text-sm text-slate-700">
-                      Webhook secret
-                      <input
-                        type="password"
-                        value={draft.webhookSecret}
-                        onChange={(event) =>
-                          updateIntegrationDraft(
-                            provider,
-                            "webhookSecret",
-                            event.target.value,
-                          )
-                        }
-                        placeholder="replace-for-local-testing"
-                        className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                      />
-                    </label>
+                      <label className="flex flex-col gap-1 text-sm text-slate-700">
+                        Status
+                        <select
+                          value={draft.status}
+                          onChange={(event) =>
+                            updateIntegrationDraft(
+                              provider,
+                              "status",
+                              event.target.value,
+                            )
+                          }
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                        >
+                          <option value="draft">Draft</option>
+                          <option value="active">Active</option>
+                          <option value="disabled">Disabled</option>
+                          <option value="error">Error</option>
+                        </select>
+                      </label>
 
-                    {provider === "shiphero" ? (
-                      <>
+                      <label className="flex flex-col gap-1 text-sm text-slate-700">
+                        {provider === "shopify"
+                          ? "Shop domain"
+                          : "External account ID"}
+                        <input
+                          value={
+                            provider === "shopify"
+                              ? draft.externalShopDomain
+                              : draft.externalAccountId
+                          }
+                          onChange={(event) =>
+                            updateIntegrationDraft(
+                              provider,
+                              provider === "shopify"
+                                ? "externalShopDomain"
+                                : "externalAccountId",
+                              event.target.value,
+                            )
+                          }
+                          placeholder={
+                            provider === "shopify"
+                              ? "demo-shop.myshopify.com"
+                              : "demo-shiphero-account"
+                          }
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                        />
+                      </label>
+
+                      {provider === "shopify" ? (
                         <label className="flex flex-col gap-1 text-sm text-slate-700">
-                          API key
+                          External account ID
                           <input
-                            value={draft.apiKey}
+                            value={draft.externalAccountId}
                             onChange={(event) =>
                               updateIntegrationDraft(
                                 provider,
-                                "apiKey",
+                                "externalAccountId",
                                 event.target.value,
                               )
                             }
-                            placeholder="ShipHero API key"
+                            placeholder="demo-shop"
                             className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
                           />
                         </label>
+                      ) : null}
 
-                        <label className="flex flex-col gap-1 text-sm text-slate-700">
-                          API secret
-                          <input
-                            type="password"
-                            value={draft.apiSecret}
-                            onChange={(event) =>
-                              updateIntegrationDraft(
-                                provider,
-                                "apiSecret",
-                                event.target.value,
-                              )
-                            }
-                            placeholder="ShipHero API secret"
-                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
-                          />
-                        </label>
-                      </>
-                    ) : null}
+                      <label className="flex flex-col gap-1 text-sm text-slate-700">
+                        Webhook secret
+                        <input
+                          type="password"
+                          value={draft.webhookSecret}
+                          onChange={(event) =>
+                            updateIntegrationDraft(
+                              provider,
+                              "webhookSecret",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="replace-for-local-testing"
+                          className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                        />
+                      </label>
 
-                    <button
-                      type="submit"
-                      disabled={savingIntegrationProvider === provider}
-                      className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-                    >
-                      {savingIntegrationProvider === provider
-                        ? "Saving..."
-                        : `Save ${title}`}
-                    </button>
-                  </form>
-                </div>
-              );
-            })}
+                      {provider === "shiphero" ? (
+                        <>
+                          <label className="flex flex-col gap-1 text-sm text-slate-700">
+                            API key
+                            <input
+                              value={draft.apiKey}
+                              onChange={(event) =>
+                                updateIntegrationDraft(
+                                  provider,
+                                  "apiKey",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="ShipHero API key"
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                            />
+                          </label>
+
+                          <label className="flex flex-col gap-1 text-sm text-slate-700">
+                            API secret
+                            <input
+                              type="password"
+                              value={draft.apiSecret}
+                              onChange={(event) =>
+                                updateIntegrationDraft(
+                                  provider,
+                                  "apiSecret",
+                                  event.target.value,
+                                )
+                              }
+                              placeholder="ShipHero API secret"
+                              className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                            />
+                          </label>
+                        </>
+                      ) : null}
+
+                      <button
+                        type="submit"
+                        disabled={savingIntegrationProvider === provider}
+                        className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                      >
+                        {savingIntegrationProvider === provider
+                          ? "Saving..."
+                          : `Save ${title}`}
+                      </button>
+                    </form>
+                  </div>
+                );
+              },
+            )}
           </div>
         ) : null}
       </div>
@@ -977,72 +1184,155 @@ export default function InventoryDashboard({
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-semibold text-slate-900">
-                Recent sync activity
+                Exception workflow
               </p>
               <p className="text-xs text-slate-500">
-                Latest Shopify and ShipHero mutations
+                Recovery and operator follow-up right now
               </p>
             </div>
 
-            {reconciliationSnapshot.recentSyncActivity.length === 0 ? (
+            {exceptionHighlights.length === 0 ? (
               <p className="mt-4 text-sm text-slate-600">
-                No recent webhook-driven inventory mutations are available yet.
+                No warehouse or inventory exceptions are currently open.
               </p>
             ) : (
               <div className="mt-4 grid gap-3">
-                {reconciliationSnapshot.recentSyncActivity
-                  .slice(0, 5)
-                  .map((entry) => {
-                    const changes = summarizeAuditChanges(entry).slice(0, 2);
-
-                    return (
-                      <div
-                        key={entry.id}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-3"
-                      >
-                        <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">
-                              {entry.itemLabel ?? "Unknown inventory item"}
-                            </p>
-                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
-                              {entry.source} {entry.action}
-                            </p>
-                          </div>
-                          <p className="text-xs text-slate-500">
-                            {new Date(entry.created_at).toLocaleString()}
-                          </p>
-                        </div>
-
-                        {changes.length > 0 ? (
-                          <div className="mt-2 grid gap-1 text-sm text-slate-700">
-                            {changes.map((change) => (
-                              <p key={`${entry.id}-${change}`}>{change}</p>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="mt-2 text-sm text-slate-600">
-                            No field-level diff was captured for this sync.
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
+                {exceptionHighlights.map((highlight, index) => (
+                  <div
+                    key={`${highlight.title}-${index}`}
+                    className={`rounded-lg border px-3 py-3 ${
+                      highlight.tone === "amber"
+                        ? "border-amber-300 bg-amber-50"
+                        : "border-slate-200 bg-white"
+                    }`}
+                  >
+                    <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                      {highlight.eyebrow}
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-slate-900">
+                      {highlight.title}
+                    </p>
+                    <p className="mt-2 text-sm text-slate-700">
+                      {highlight.body}
+                    </p>
+                    {highlight.footer ? (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {highlight.footer}
+                      </p>
+                    ) : null}
+                  </div>
+                ))}
               </div>
             )}
+
+            <div className="mt-4 border-t border-slate-200 pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-slate-900">
+                  Recent sync activity
+                </p>
+                <p className="text-xs text-slate-500">
+                  Latest Shopify and ShipHero mutations
+                </p>
+              </div>
+
+              {reconciliationSnapshot.recentSyncActivity.length === 0 ? (
+                <p className="mt-4 text-sm text-slate-600">
+                  No recent webhook-driven inventory mutations are available
+                  yet.
+                </p>
+              ) : (
+                <div className="mt-4 grid gap-3">
+                  {reconciliationSnapshot.recentSyncActivity
+                    .slice(0, 5)
+                    .map((entry) => {
+                      const changes = summarizeAuditChanges(entry).slice(0, 2);
+
+                      return (
+                        <div
+                          key={entry.id}
+                          className="rounded-lg border border-slate-200 bg-white px-3 py-3"
+                        >
+                          <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {entry.itemLabel ?? "Unknown inventory item"}
+                              </p>
+                              <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                                {entry.source} {entry.action}
+                              </p>
+                            </div>
+                            <p className="text-xs text-slate-500">
+                              {new Date(entry.created_at).toLocaleString()}
+                            </p>
+                          </div>
+
+                          {changes.length > 0 ? (
+                            <div className="mt-2 grid gap-1 text-sm text-slate-700">
+                              {changes.map((change) => (
+                                <p key={`${entry.id}-${change}`}>{change}</p>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="mt-2 text-sm text-slate-600">
+                              No field-level diff was captured for this sync.
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-semibold text-slate-900">
-            Recent audit history
-          </p>
-          <p className="text-sm text-slate-600">
-            Review the latest tenant-scoped inventory mutations from webhook
-            syncs and manual operator changes.
-          </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-semibold text-slate-900">
+              Recent audit history
+            </p>
+            <p className="text-sm text-slate-600">
+              Review the latest tenant-scoped inventory mutations from webhook
+              syncs and manual operator changes.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3 md:flex-row">
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              History focus
+              <select
+                value={auditFilter}
+                onChange={(event) =>
+                  setAuditFilter(event.target.value as AuditHistoryFilter)
+                }
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+              >
+                <option value="all">All activity</option>
+                <option value="syncs">Sync-only</option>
+                <option value="operator">Operator-only</option>
+                <option value="exceptions">Exception trail</option>
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-slate-700">
+              Show entries
+              <select
+                value={auditDisplayLimit}
+                onChange={(event) =>
+                  setAuditDisplayLimit(
+                    Number(event.target.value) as 12 | 25 | 50,
+                  )
+                }
+                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+              >
+                <option value={12}>12</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+              </select>
+            </label>
+          </div>
         </div>
 
         {auditLoading ? (
@@ -1065,7 +1355,7 @@ export default function InventoryDashboard({
 
         {!auditLoading && !auditError && filteredAuditHistory.length > 0 ? (
           <div className="mt-4 grid gap-3">
-            {filteredAuditHistory.map((entry) => {
+            {visibleAuditHistory.map((entry) => {
               const changes = summarizeAuditChanges(entry);
 
               return (
@@ -1113,6 +1403,13 @@ export default function InventoryDashboard({
                 </div>
               );
             })}
+
+            {filteredAuditHistory.length > visibleAuditHistory.length ? (
+              <p className="text-sm text-slate-500">
+                Showing {visibleAuditHistory.length} of{" "}
+                {filteredAuditHistory.length} matching audit entries.
+              </p>
+            ) : null}
           </div>
         ) : null}
       </div>
