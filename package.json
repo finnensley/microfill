@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:routes": "vitest run tests/api/inventory-routes.test.ts tests/api/integrations-route.test.ts tests/api/webhooks-route.test.ts",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",
     "supabase:status": "npx supabase status",

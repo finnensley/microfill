@@ -55,6 +55,7 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 
 - Vitest route coverage now exists for dashboard APIs (`/api/inventory`, `/api/inventory/audit`, `/api/integrations`)
 - Vitest route coverage now exists for Shopify and ShipHero webhook handlers
+- Focused route validation now has a dedicated CI workflow that runs on pull requests and pushes to `main`
 
 ### Webhook Foundation
 
@@ -84,6 +85,17 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 - No webhook retry/dead-letter path yet
 - No browser or database-backed end-to-end suite yet
 - No production deployment plan yet
+
+## Production Readiness Gaps
+
+The README describes the intended production product. The repository is closer to a validated local MVP slice. Before claiming production readiness, the codebase still needs all of the following:
+
+- Real ShipHero provider delivery validated with production-issued credentials and account identifiers
+- Queue-backed asynchronous webhook processing, retry tracking, and dead-letter handling for repeated failures
+- Automated reconciliation jobs so delayed or dropped warehouse webhooks are not the only recovery path
+- Browser-level end-to-end coverage for auth, onboarding, dashboard, and operator recovery workflows
+- Deployment hardening for secrets, environment promotion, runtime monitoring, and release validation
+- Alerting, reporting, and anomaly-detection channels beyond the current dashboard and audit trail
 
 ## Current Build Priorities
 
@@ -179,7 +191,8 @@ Definition of done:
 ## Recommended Execution Order
 
 1. Validate live ShipHero delivery against a tunnel or sandbox source.
-2. Revisit OAuth only if operator onboarding needs exceed email-based auth.
+2. Add deployment and browser-level validation milestones for the production-readiness gap list.
+3. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
