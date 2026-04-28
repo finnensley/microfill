@@ -66,6 +66,8 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 - Cloudflare tunnel delivery has been smoke-tested successfully against the local Shopify route
 - Shopify webhook handling now skips malformed line items without `variant_id` instead of returning a 500
 - Recorded ShipHero replay tooling now exists for PO receipt and shipment validation
+- ShipHero live-validation helper scripts now exist to prepare tenant config, smoke-test the tunnel, and verify recent tenant-scoped audit results
+- ShipHero webhook handling now persists tenant integration `last_synced_at` and `last_error` state for live-delivery diagnosis
 
 ## What Is Not Done
 
@@ -123,7 +125,7 @@ Definition of done:
 
 ### Priority 3: Finish ShipHero Inbound Flow
 
-**Status:** Recorded PO and shipment payload replays now succeed locally and verify inventory plus audit-log side effects. Live ShipHero delivery is still pending.
+**Status:** Recorded PO and shipment payload replays now succeed locally and verify inventory plus audit-log side effects. Live ShipHero prep, smoke-test, and verification tooling now exist, but real provider delivery is still pending.
 
 **Goal:** Validate the warehouse-side sync path using the existing RPC foundation.
 
@@ -180,9 +182,11 @@ Resume checklist:
 
 - Confirm the local app is running with `npm run dev`.
 - Confirm the public tunnel URL used for live delivery is still current.
+- Run `npm run webhook:shiphero:live:prepare` to sync the tenant integration and print the exact live webhook target.
+- Run `npm run webhook:shiphero:live:smoke` to verify the tunnel, secret, and account-ID mapping before the live provider resend.
 - Point the live ShipHero source or sandbox webhook at the active tunnel URL.
 - Deliver a real ShipHero receiving or shipment event.
-- Verify resulting `inventory_items` and `audit_logs` mutations with the existing replay and audit tooling.
+- Verify resulting `inventory_items` and `audit_logs` mutations with `npm run webhook:shiphero:live:verify`.
 
 ## Open Decisions
 

@@ -20,7 +20,10 @@
     "webhook:shopify:live:smoke": "node scripts/smoke-test-shopify-live-webhook.mjs",
     "webhook:shopify:live:verify": "node scripts/verify-shopify-live-validation.mjs",
     "webhook:replay:shiphero:po": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/po-update.json",
-    "webhook:replay:shiphero:shipment": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/shipment-update.json"
+    "webhook:replay:shiphero:shipment": "node scripts/replay-shiphero-webhook.mjs fixtures/shiphero/shipment-update.json",
+    "webhook:shiphero:live:prepare": "node scripts/prepare-shiphero-live-validation.mjs",
+    "webhook:shiphero:live:smoke": "node scripts/smoke-test-shiphero-live-webhook.mjs",
+    "webhook:shiphero:live:verify": "node scripts/verify-shiphero-live-validation.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

@@ -80,6 +80,26 @@ function createShopifySupabaseClient(params: {
   };
 }
 
+function createIntegrationStatusSupabaseClient() {
+  const integrationUpdate = createIntegrationUpdateMock();
+  const from = vi.fn((table: string) => {
+    if (table === "integrations") {
+      return {
+        update: integrationUpdate.update,
+      };
+    }
+
+    throw new Error(`Unexpected table: ${table}`);
+  });
+
+  return {
+    integrationUpdate,
+    supabase: {
+      from,
+    },
+  };
+}
+
 describe("webhook routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -353,10 +373,15 @@ describe("webhook routes", () => {
   });
 
   it("rejects ShipHero webhooks with an invalid signature", async () => {
+    const shipHeroClient = createIntegrationStatusSupabaseClient();
+
     mockResolveIntegration.mockResolvedValue({
+      id: "integration-shiphero-1",
       tenant_id: "tenant-1",
       webhook_secret: "shiphero-secret",
     });
+
+    mockCreateServerSupabaseClient.mockReturnValue(shipHeroClient.supabase);
 
     const response = await POST_SHIPHERO(
       new Request("http://localhost/api/webhooks/shiphero", {
@@ -371,6 +396,12 @@ describe("webhook routes", () => {
     );
 
     expect(response.status).toBe(401);
+    expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: "Invalid ShipHero webhook signature for tenant-1",
+        last_synced_at: expect.any(String),
+      }),
+    );
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
   });
 
@@ -390,11 +421,16 @@ describe("webhook routes", () => {
       .update(rawBody, "utf8")
       .digest("base64");
 
+    const shipHeroClient = createIntegrationStatusSupabaseClient();
+
     mockResolveIntegration.mockResolvedValue({
+      id: "integration-shiphero-1",
       tenant_id: "tenant-1",
       webhook_secret: secret,
     });
     mockProcessSyncEventsBatch.mockResolvedValue({ failed: 0, succeeded: 2 });
+
+    mockCreateServerSupabaseClient.mockReturnValue(shipHeroClient.supabase);
 
     const response = await POST_SHIPHERO(
       new Request("http://localhost/api/webhooks/shiphero", {
@@ -426,6 +462,12 @@ describe("webhook routes", () => {
         type: "stock_received",
       },
     ]);
+    expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: null,
+        last_synced_at: expect.any(String),
+      }),
+    );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       failed: 0,
@@ -453,11 +495,16 @@ describe("webhook routes", () => {
       .update(rawBody, "utf8")
       .digest("base64");
 
+    const shipHeroClient = createIntegrationStatusSupabaseClient();
+
     mockResolveIntegration.mockResolvedValue({
+      id: "integration-shiphero-1",
       tenant_id: "tenant-1",
       webhook_secret: secret,
     });
     mockProcessSyncEventsBatch.mockResolvedValue({ failed: 0, succeeded: 1 });
+
+    mockCreateServerSupabaseClient.mockReturnValue(shipHeroClient.supabase);
 
     const response = await POST_SHIPHERO(
       new Request("http://localhost/api/webhooks/shiphero", {
@@ -481,6 +528,12 @@ describe("webhook routes", () => {
         type: "stock_shipped",
       },
     ]);
+    expect(shipHeroClient.integrationUpdate.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        last_error: null,
+        last_synced_at: expect.any(String),
+      }),
+    );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       failed: 0,

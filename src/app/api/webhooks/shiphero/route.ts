@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
+import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getShipHeroWebhookSecret } from "@/lib/supabase-config";
 import { resolveIntegration } from "@/services/integrations";
 import { ShipHeroPOUpdate, ShipHeroShipmentUpdate } from "@/types/shiphero";
@@ -7,6 +8,22 @@ import {
   processSyncEventsBatch,
   InventoryEvent,
 } from "@/services/inventory-sync";
+
+type PersistIntegrationStatus = (lastError: string | null) => Promise<void>;
+
+function buildWebhookStatusMessage(params: {
+  externalId: string;
+  failed: number;
+  lineItems: number;
+  succeeded: number;
+  webhookType: string;
+}) {
+  if (params.failed === 0) {
+    return null;
+  }
+
+  return `type=${params.webhookType} external_id=${params.externalId} line_items=${params.lineItems} succeeded=${params.succeeded} failed=${params.failed}`;
+}
 
 /**
  * ShipHero Webhook Handler
@@ -16,6 +33,7 @@ import {
  */
 export async function POST(req: Request) {
   try {
+    const supabase = createServerSupabaseClient();
     const tenantHeader = req.headers.get("x-tenant-id");
     const shopIdHeader = req.headers.get("x-shopify-shop-id");
     const shipHeroAccountId = req.headers.get("x-shiphero-account-id");
@@ -44,6 +62,31 @@ export async function POST(req: Request) {
       externalAccountId: shipHeroAccountId ?? shopIdHeader,
     });
 
+    const persistIntegrationStatus: PersistIntegrationStatus = async (
+      lastError,
+    ) => {
+      if (!integration?.id) {
+        return;
+      }
+
+      const { error } = await supabase
+        .from("integrations")
+        .update({
+          last_error: lastError,
+          last_synced_at: new Date().toISOString(),
+        })
+        .eq("id", integration.id)
+        .eq("tenant_id", integration.tenant_id);
+
+      if (error) {
+        console.error("Unable to persist ShipHero integration status", {
+          error: error.message,
+          integrationId: integration.id,
+          tenantId: integration.tenant_id,
+        });
+      }
+    };
+
     const resolvedTenantId =
       integration?.tenant_id ?? tenantHeader ?? shopIdHeader;
     const shipHeroWebhookSecret =
@@ -70,6 +113,9 @@ export async function POST(req: Request) {
 
     // 4. Security Check: Compare hashes
     if (!isSignatureValid) {
+      await persistIntegrationStatus(
+        `Invalid ShipHero webhook signature for ${shipHeroAccountId ?? resolvedTenantId}`,
+      );
       console.error("Invalid ShipHero webhook signature", {
         tenantId: resolvedTenantId,
         shipHeroAccountId,
@@ -88,15 +134,19 @@ export async function POST(req: Request) {
       return handlePOUpdate(
         body as ShipHeroPOUpdate,
         resolvedTenantId,
+        persistIntegrationStatus,
         shipHeroAccountId,
       );
     } else if (body.webhook_type === "Shipment Update") {
       return handleShipmentUpdate(
         body as ShipHeroShipmentUpdate,
         resolvedTenantId,
+        persistIntegrationStatus,
         shipHeroAccountId,
       );
     }
+
+    await persistIntegrationStatus(null);
 
     return NextResponse.json(
       {
@@ -121,9 +171,11 @@ export async function POST(req: Request) {
 async function handlePOUpdate(
   body: ShipHeroPOUpdate,
   tenantId: string,
+  persistIntegrationStatus: PersistIntegrationStatus,
   shipHeroAccountId?: string | null,
 ) {
   if (!body.line_items || body.line_items.length === 0) {
+    await persistIntegrationStatus(null);
     return NextResponse.json(
       {
         message: "No items to process",
@@ -156,6 +208,16 @@ async function handlePOUpdate(
     ...result,
   });
 
+  await persistIntegrationStatus(
+    buildWebhookStatusMessage({
+      externalId: body.po_number,
+      failed: result.failed,
+      lineItems: body.line_items.length,
+      succeeded: result.succeeded,
+      webhookType: body.webhook_type,
+    }),
+  );
+
   return NextResponse.json(
     {
       message: "PO synced",
@@ -176,9 +238,11 @@ async function handlePOUpdate(
 async function handleShipmentUpdate(
   body: ShipHeroShipmentUpdate,
   tenantId: string,
+  persistIntegrationStatus: PersistIntegrationStatus,
   shipHeroAccountId?: string | null,
 ) {
   if (!body.line_items || body.line_items.length === 0) {
+    await persistIntegrationStatus(null);
     return NextResponse.json(
       {
         message: "No items to process",
@@ -211,6 +275,16 @@ async function handleShipmentUpdate(
     lineItems: body.line_items.length,
     ...result,
   });
+
+  await persistIntegrationStatus(
+    buildWebhookStatusMessage({
+      externalId: body.order_number,
+      failed: result.failed,
+      lineItems: body.line_items.length,
+      succeeded: result.succeeded,
+      webhookType: body.webhook_type,
+    }),
+  );
 
   return NextResponse.json(
     {

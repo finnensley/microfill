@@ -204,6 +204,52 @@ npm run webhook:shopify:live:verify
 
 The real-ID mapping matters because the local webhook handler matches incoming Shopify line items by `shopify_variant_id`. The seeded demo IDs are placeholders until you replace them with actual IDs from `microfill-2.myshopify.com`.
 
+## Live ShipHero Validation
+
+Use this only when the app is already running locally and a public HTTPS tunnel is forwarding to `http://localhost:3000`.
+
+1. Start the app locally:
+
+```bash
+npm run dev
+```
+
+2. Start a public HTTPS tunnel to `localhost:3000`.
+
+Current recommendation: use a Cloudflare quick tunnel for the same reason as Shopify.
+
+```bash
+cloudflared tunnel --url http://localhost:3000
+```
+
+3. Copy the generated public URL into `SHIPHERO_TUNNEL_URL` in `.env.local`.
+4. Set or confirm the live-validation values in `.env.local`: `SHIPHERO_TUNNEL_URL`, `SHIPHERO_LIVE_ACCOUNT_ID`, and a non-empty `SHIPHERO_WEBHOOK_SECRET`.
+5. Prepare the tenant-scoped ShipHero integration and print the exact webhook target plus tracked validation SKUs:
+
+```bash
+npm run webhook:shiphero:live:prepare
+```
+
+6. Smoke-test the public tunnel and HMAC secret before touching the live ShipHero source:
+
+```bash
+npm run webhook:shiphero:live:smoke
+```
+
+This should return a `200` response from `/api/webhooks/shiphero`. If it fails, fix the local app, tunnel, secret, or account ID mapping before retrying the live source.
+
+7. In ShipHero or the sandbox source, create or update the webhook destination so it points at `https://your-tunnel-host/api/webhooks/shiphero` and uses the same secret as `SHIPHERO_WEBHOOK_SECRET`.
+8. Confirm the provider sends the same account or warehouse identifier stored in `SHIPHERO_LIVE_ACCOUNT_ID`, or update the integration config to match what ShipHero actually sends in `x-shiphero-account-id`.
+9. Trigger a live `PO Update` or `Shipment Update` for one of the tracked SKUs printed by the prepare script.
+10. Verify the result in the dashboard, then confirm database and audit-log changes with:
+
+```bash
+npm run webhook:shiphero:live:verify
+```
+
+11. The verifier also prints the tenant's ShipHero integration state, including `last_synced_at` and `last_error`, so you can tell whether ShipHero reached the webhook route even when no inventory rows changed.
+12. If you need a narrower audit window after a resend, pass a timestamp filter such as `npm run webhook:shiphero:live:verify -- --since=2026-04-27T18:00:00Z`.
+
 ### Current Shopify Validation State
 
 As of April 18, 2026, live Shopify validation is confirmed for the current MVP path.
