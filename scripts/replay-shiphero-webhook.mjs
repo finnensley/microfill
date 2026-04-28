@@ -129,7 +129,7 @@ const response = await fetch(`${baseUrl}/api/webhooks/shiphero`, {
   method: "POST",
   headers: {
     "content-type": "application/json",
-    "x-shiphero-webhook-signature": hmac,
+    "x-shiphero-hmac-sha256": hmac,
     "x-shiphero-account-id": shipHeroAccountId,
     "x-tenant-id": tenantId,
   },

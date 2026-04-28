@@ -23,7 +23,10 @@ vi.mock("@/services/inventory-sync", () => ({
   processSyncEventsBatch: mockProcessSyncEventsBatch,
 }));
 
-import { POST as POST_SHIPHERO } from "@/app/api/webhooks/shiphero/route";
+import {
+  HEAD as HEAD_SHIPHERO,
+  POST as POST_SHIPHERO,
+} from "@/app/api/webhooks/shiphero/route";
 import { POST as POST_SHOPIFY } from "@/app/api/webhooks/shopify/route";
 
 function createIntegrationUpdateMock() {
@@ -405,6 +408,12 @@ describe("webhook routes", () => {
     await expect(response.json()).resolves.toEqual({ error: "Unauthorized" });
   });
 
+  it("responds to ShipHero HEAD validation requests", async () => {
+    const response = await HEAD_SHIPHERO();
+
+    expect(response.status).toBe(200);
+  });
+
   it("normalizes ShipHero PO updates into inventory events", async () => {
     const payload = {
       webhook_type: "PO Update",
@@ -438,7 +447,7 @@ describe("webhook routes", () => {
         headers: {
           "content-type": "application/json",
           "x-shiphero-account-id": "warehouse-1",
-          "x-shiphero-webhook-signature": signature,
+          "x-shiphero-hmac-sha256": signature,
         },
         body: rawBody,
       }),
@@ -481,6 +490,65 @@ describe("webhook routes", () => {
     });
   });
 
+  it("normalizes documented ShipHero PO envelopes using warehouse_id fallback", async () => {
+    const payload = {
+      purchase_order: {
+        webhook_type: "PO Update",
+        po_id: 31,
+        po_number: "PO 31",
+        status: "pending",
+        warehouse_id: 76733,
+        line_items: [{ sku: "SKU-1", quantity_received: 5 }],
+      },
+      test: "0",
+    };
+    const rawBody = JSON.stringify(payload);
+    const secret = "shiphero-secret";
+    const signature = crypto
+      .createHmac("sha256", secret)
+      .update(rawBody, "utf8")
+      .digest("base64");
+
+    const shipHeroClient = createIntegrationStatusSupabaseClient();
+
+    mockResolveIntegration.mockResolvedValue({
+      id: "integration-shiphero-1",
+      tenant_id: "tenant-1",
+      webhook_secret: secret,
+    });
+    mockProcessSyncEventsBatch.mockResolvedValue({ failed: 0, succeeded: 1 });
+
+    mockCreateServerSupabaseClient.mockReturnValue(shipHeroClient.supabase);
+
+    const response = await POST_SHIPHERO(
+      new Request("http://localhost/api/webhooks/shiphero", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-shiphero-hmac-sha256": signature,
+        },
+        body: rawBody,
+      }),
+    );
+
+    expect(mockResolveIntegration).toHaveBeenCalledWith(
+      expect.objectContaining({
+        externalAccountId: "76733",
+      }),
+    );
+    expect(mockProcessSyncEventsBatch).toHaveBeenCalledWith([
+      {
+        externalId: "PO 31",
+        quantity: 5,
+        sku: "SKU-1",
+        source: "shiphero",
+        tenantId: "tenant-1",
+        type: "stock_received",
+      },
+    ]);
+    expect(response.status).toBe(200);
+  });
+
   it("normalizes ShipHero shipment updates into inventory events", async () => {
     const payload = {
       webhook_type: "Shipment Update",
@@ -512,7 +580,7 @@ describe("webhook routes", () => {
         headers: {
           "content-type": "application/json",
           "x-shiphero-account-id": "warehouse-1",
-          "x-shiphero-webhook-signature": signature,
+          "x-shiphero-hmac-sha256": signature,
         },
         body: rawBody,
       }),
@@ -545,5 +613,60 @@ describe("webhook routes", () => {
       verified: true,
       webhookType: "Shipment Update",
     });
+  });
+
+  it("normalizes documented ShipHero shipment envelopes", async () => {
+    const payload = {
+      webhook_type: "Shipment Update",
+      fulfillment: {
+        webhook_type: "Shipment Update",
+        warehouse_id: 76733,
+        order_id: 1001,
+        order_number: "ORDER-101",
+        tracking_number: "TRACK-123",
+        line_items: [{ sku: "SKU-1", quantity: 2 }],
+      },
+    };
+    const rawBody = JSON.stringify(payload);
+    const secret = "shiphero-secret";
+    const signature = crypto
+      .createHmac("sha256", secret)
+      .update(rawBody, "utf8")
+      .digest("base64");
+
+    const shipHeroClient = createIntegrationStatusSupabaseClient();
+
+    mockResolveIntegration.mockResolvedValue({
+      id: "integration-shiphero-1",
+      tenant_id: "tenant-1",
+      webhook_secret: secret,
+    });
+    mockProcessSyncEventsBatch.mockResolvedValue({ failed: 0, succeeded: 1 });
+
+    mockCreateServerSupabaseClient.mockReturnValue(shipHeroClient.supabase);
+
+    const response = await POST_SHIPHERO(
+      new Request("http://localhost/api/webhooks/shiphero", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-shiphero-hmac-sha256": signature,
+          "x-tenant-id": "tenant-1",
+        },
+        body: rawBody,
+      }),
+    );
+
+    expect(mockProcessSyncEventsBatch).toHaveBeenCalledWith([
+      {
+        externalId: "ORDER-101",
+        quantity: 2,
+        sku: "SKU-1",
+        source: "shiphero",
+        tenantId: "tenant-1",
+        type: "stock_shipped",
+      },
+    ]);
+    expect(response.status).toBe(200);
   });
 });

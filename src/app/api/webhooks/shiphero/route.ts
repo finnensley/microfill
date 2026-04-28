@@ -3,13 +3,41 @@ import crypto from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { getShipHeroWebhookSecret } from "@/lib/supabase-config";
 import { resolveIntegration } from "@/services/integrations";
-import { ShipHeroPOUpdate, ShipHeroShipmentUpdate } from "@/types/shiphero";
+import {
+  ShipHeroPOUpdate,
+  ShipHeroPOUpdateEnvelope,
+  ShipHeroShipmentUpdate,
+  ShipHeroShipmentUpdateEnvelope,
+} from "@/types/shiphero";
 import {
   processSyncEventsBatch,
   InventoryEvent,
 } from "@/services/inventory-sync";
 
 type PersistIntegrationStatus = (lastError: string | null) => Promise<void>;
+type ShipHeroWebhookBody =
+  | ShipHeroPOUpdate
+  | ShipHeroPOUpdateEnvelope
+  | ShipHeroShipmentUpdate
+  | ShipHeroShipmentUpdateEnvelope;
+
+function normalizeShipHeroWebhookBody(body: ShipHeroWebhookBody) {
+  const purchaseOrder =
+    "purchase_order" in body ? body.purchase_order : undefined;
+  const fulfillment = "fulfillment" in body ? body.fulfillment : undefined;
+  const webhookType =
+    purchaseOrder?.webhook_type ??
+    fulfillment?.webhook_type ??
+    ("webhook_type" in body ? body.webhook_type : null);
+
+  return {
+    purchaseOrder,
+    fulfillment,
+    webhookType,
+    warehouseId:
+      purchaseOrder?.warehouse_id ?? fulfillment?.warehouse_id ?? undefined,
+  };
+}
 
 function buildWebhookStatusMessage(params: {
   externalId: string;
@@ -25,6 +53,10 @@ function buildWebhookStatusMessage(params: {
   return `type=${params.webhookType} external_id=${params.externalId} line_items=${params.lineItems} succeeded=${params.succeeded} failed=${params.failed}`;
 }
 
+export function HEAD() {
+  return new NextResponse(null, { status: 200 });
+}
+
 /**
  * ShipHero Webhook Handler
  *
@@ -38,17 +70,13 @@ export async function POST(req: Request) {
     const shopIdHeader = req.headers.get("x-shopify-shop-id");
     const shipHeroAccountId = req.headers.get("x-shiphero-account-id");
 
-    if (!tenantHeader && !shopIdHeader && !shipHeroAccountId) {
-      console.error("Missing tenant or integration identifier header");
-      return NextResponse.json(
-        { error: "Missing tenant identifier" },
-        { status: 400 },
-      );
-    }
-
     // 2. Get raw body for HMAC verification
     const rawBody = await req.text();
-    const hmacHeader = req.headers.get("x-shiphero-webhook-signature")?.trim();
+    const parsedBody = JSON.parse(rawBody) as ShipHeroWebhookBody;
+    const normalizedBody = normalizeShipHeroWebhookBody(parsedBody);
+    const hmacHeader =
+      req.headers.get("x-shiphero-hmac-sha256")?.trim() ??
+      req.headers.get("x-shiphero-webhook-signature")?.trim();
 
     // 3. Verify HMAC signature - Prevent unauthorized webhook calls
     if (!hmacHeader) {
@@ -59,7 +87,11 @@ export async function POST(req: Request) {
     const integration = await resolveIntegration({
       provider: "shiphero",
       tenantId: tenantHeader,
-      externalAccountId: shipHeroAccountId ?? shopIdHeader,
+      externalAccountId:
+        shipHeroAccountId ??
+        shopIdHeader ??
+        normalizedBody.warehouseId?.toString() ??
+        null,
     });
 
     const persistIntegrationStatus: PersistIntegrationStatus = async (
@@ -128,21 +160,19 @@ export async function POST(req: Request) {
     }
 
     // 5. Parse and normalize based on webhook type
-    const body = JSON.parse(rawBody);
-
-    if (body.webhook_type === "PO Update") {
+    if (normalizedBody.webhookType === "PO Update") {
       return handlePOUpdate(
-        body as ShipHeroPOUpdate,
+        normalizedBody.purchaseOrder ?? (parsedBody as ShipHeroPOUpdate),
         resolvedTenantId,
         persistIntegrationStatus,
-        shipHeroAccountId,
+        shipHeroAccountId ?? normalizedBody.warehouseId?.toString() ?? null,
       );
-    } else if (body.webhook_type === "Shipment Update") {
+    } else if (normalizedBody.webhookType === "Shipment Update") {
       return handleShipmentUpdate(
-        body as ShipHeroShipmentUpdate,
+        normalizedBody.fulfillment ?? (parsedBody as ShipHeroShipmentUpdate),
         resolvedTenantId,
         persistIntegrationStatus,
-        shipHeroAccountId,
+        shipHeroAccountId ?? normalizedBody.warehouseId?.toString() ?? null,
       );
     }
 
@@ -152,7 +182,7 @@ export async function POST(req: Request) {
       {
         message: "Webhook type not handled",
         verified: true,
-        webhookType: body.webhook_type ?? null,
+        webhookType: normalizedBody.webhookType,
       },
       { status: 200 },
     );
