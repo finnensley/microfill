@@ -83,6 +83,7 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 ### Secondary Gaps
 
 - No webhook retry/dead-letter path yet
+- No initial `webhook_events` queue foundation files exist yet for the planned ShipHero version 2 architecture
 - No browser or database-backed end-to-end suite yet
 - No production deployment plan yet
 
@@ -144,6 +145,8 @@ Definition of done:
 
 **Implementation decision:** Keep the current synchronous ShipHero webhook path for the MVP so live provider validation can complete without adding queue infrastructure first. Defer queue-backed retries and dead-letter handling to version 2.
 
+**Current architecture note:** The version 2 queue foundation has been planned, but the initial file set for `webhook_events`, queue services, worker processing, and retry/dead-letter tests has not been created yet.
+
 **Goal:** Validate the warehouse-side sync path using the existing RPC foundation.
 
 Deliverables:
@@ -190,30 +193,30 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Validate live ShipHero delivery against a tunnel or sandbox source.
-2. Add deployment and browser-level validation milestones for the production-readiness gap list.
-3. Revisit OAuth only if operator onboarding needs exceed email-based auth.
+1. Create the initial ShipHero queue foundation file set without changing the current synchronous MVP route behavior.
+2. Validate live ShipHero delivery against a tunnel or sandbox source.
+3. Add deployment and browser-level validation milestones for the production-readiness gap list.
+4. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
-**Best next task:** validate live ShipHero delivery against a tunnel or sandbox source.
+**Best next task:** create the initial ShipHero queue foundation file set while preserving the current synchronous MVP route.
 
 Why:
 
+- The queue-backed version 2 architecture is the clearest internal production-readiness gap that can be advanced immediately without waiting on external credentials.
+- The current ShipHero route is still synchronous, so queue persistence, worker ownership, and retry/dead-letter contracts are not established yet.
 - Live Shopify delivery has now been confirmed against the mapped local variants with fresh `committed_quantity` and `audit_logs` mutations.
-- Recorded ShipHero flows already pass locally, so live provider delivery is now the biggest unresolved integration risk.
-- The refreshed Cloudflare tunnel and smoke test already prove the public webhook path is reachable with the current local secret/account configuration.
-- The operator surface and audit trail are already in place, which makes warehouse-side validation the clearest next milestone.
+- Recorded ShipHero flows already pass locally, and the tunnel smoke test already proves the public webhook path is reachable with the current local secret/account configuration.
+- Real ShipHero provider delivery still matters, but that work remains partially dependent on external credentials and account identifiers.
 
 Resume checklist:
 
-- Confirm the local app is running with `npm run dev`.
-- Keep the active public tunnel URL running and confirm `SHIPHERO_TUNNEL_URL` in `.env.local` still matches it.
-- Run `npm run webhook:shiphero:live:prepare` to sync the tenant integration and print the exact live webhook target.
-- Run `npm run webhook:shiphero:live:smoke` again only if the tunnel URL changes or if you need to re-check public reachability.
-- Point the live ShipHero source or sandbox webhook at the active tunnel URL.
-- Deliver a real ShipHero receiving or shipment event.
-- Verify resulting `inventory_items` and `audit_logs` mutations with `npm run webhook:shiphero:live:verify`.
+- Create a migration for a tenant-scoped `webhook_events` queue table with status, attempts, retry timing, last error, and payload metadata.
+- Add shared queue and processing types for queued ShipHero webhook events.
+- Add a queue service for enqueue, claim, mark-succeeded, mark-failed, and retry scheduling operations.
+- Add a worker entry point or processing module that can reuse the future shared ShipHero normalization and inventory sync logic.
+- Add focused tests for queue persistence and retry/dead-letter transitions before wiring the route to the queue.
 
 ## Open Decisions
 
@@ -229,6 +232,7 @@ Resume checklist:
 
 - ShipHero webhooks still exist before they are fully validated against production-like payloads
 - The MVP ShipHero route remains synchronous, so timeouts or repeated provider retries are still possible under heavier load until queue-backed processing is added in version 2
+- The planned ShipHero version 2 queue foundation has not been created yet, so retry/dead-letter architecture still exists only as a design note
 - No dead-letter or retry queue means repeated failures can still drop operational events
 - Cloudflare quick tunnels remain ephemeral, so live ShipHero smoke success only holds while the current tunnel hostname stays active
 - Audit history is visible, but long-horizon analytics and automated reconciliation jobs are still missing
