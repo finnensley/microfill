@@ -110,6 +110,10 @@ function summarizeAuditChanges(entry: InventoryAuditEntry) {
   });
 }
 
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`;
+}
+
 export default function InventoryDashboard({
   tenantId,
 }: InventoryDashboardProps) {
@@ -320,6 +324,62 @@ export default function InventoryDashboard({
       })),
     [integrationDrafts, integrations],
   );
+
+  const reconciliationSnapshot = useMemo(() => {
+    const itemSummaries = items.map((item) => {
+      const availableToSell =
+        item.total_quantity -
+        item.committed_quantity -
+        item.safety_floor_quantity;
+      const commitmentRatio =
+        item.total_quantity > 0
+          ? item.committed_quantity / item.total_quantity
+          : item.committed_quantity > 0
+            ? 1
+            : 0;
+      const atOrBelowFloor = availableToSell <= 0;
+      const needsReview =
+        item.flash_mode_enabled || atOrBelowFloor || commitmentRatio >= 0.8;
+
+      return {
+        atOrBelowFloor,
+        availableToSell,
+        commitmentRatio,
+        item,
+        needsReview,
+      };
+    });
+
+    const recentSyncActivity = auditHistory.filter(
+      (entry) => entry.source === "shiphero" || entry.source === "shopify",
+    );
+
+    return {
+      activeFlashModeCount: itemSummaries.filter(
+        (summary) => summary.item.flash_mode_enabled,
+      ).length,
+      attentionItems: itemSummaries
+        .filter((summary) => summary.needsReview)
+        .sort((left, right) => {
+          if (left.availableToSell !== right.availableToSell) {
+            return left.availableToSell - right.availableToSell;
+          }
+
+          return right.commitmentRatio - left.commitmentRatio;
+        })
+        .slice(0, 5),
+      averageCommitmentRatio:
+        itemSummaries.length > 0
+          ? itemSummaries.reduce(
+              (total, summary) => total + summary.commitmentRatio,
+              0,
+            ) / itemSummaries.length
+          : 0,
+      floorRiskCount: itemSummaries.filter((summary) => summary.atOrBelowFloor)
+        .length,
+      recentSyncActivity,
+    };
+  }, [auditHistory, items]);
 
   function updateDraft(
     itemId: string,
@@ -804,6 +864,174 @@ export default function InventoryDashboard({
             })}
           </div>
         ) : null}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-1">
+          <p className="text-sm font-semibold text-slate-900">
+            Reconciliation snapshot
+          </p>
+          <p className="text-sm text-slate-600">
+            Surface the inventory rows most likely to need operator review
+            before a warehouse or storefront mismatch turns into a customer
+            issue.
+          </p>
+        </div>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              At Or Below Floor
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">
+              {reconciliationSnapshot.floorRiskCount}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Items with no sellable buffer left after committed units and
+              safety floor.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Flash Mode Active
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">
+              {reconciliationSnapshot.activeFlashModeCount}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Inventory rows currently protected with manual flash mode.
+            </p>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+              Avg Commitment Load
+            </p>
+            <p className="mt-2 text-2xl font-semibold text-slate-900">
+              {formatPercent(reconciliationSnapshot.averageCommitmentRatio)}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              Average share of on-hand stock already committed across tracked
+              rows.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                Needs review first
+              </p>
+              <p className="text-xs text-slate-500">
+                Based on flash mode, available buffer, and commitment load
+              </p>
+            </div>
+
+            {reconciliationSnapshot.attentionItems.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-600">
+                No inventory rows are currently flagged for immediate review.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {reconciliationSnapshot.attentionItems.map((summary) => (
+                  <div
+                    key={summary.item.id}
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-3"
+                  >
+                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {summary.item.sku || summary.item.shopify_product_id}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          Variant: {summary.item.shopify_variant_id}
+                        </p>
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        Updated:{" "}
+                        {summary.item.updated_at
+                          ? new Date(summary.item.updated_at).toLocaleString()
+                          : "Unknown"}
+                      </p>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-3 text-sm text-slate-700">
+                      <span>Available: {summary.availableToSell}</span>
+                      <span>
+                        Commitment load:{" "}
+                        {formatPercent(summary.commitmentRatio)}
+                      </span>
+                      <span>
+                        Flash mode:{" "}
+                        {summary.item.flash_mode_enabled ? "On" : "Off"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-slate-900">
+                Recent sync activity
+              </p>
+              <p className="text-xs text-slate-500">
+                Latest Shopify and ShipHero mutations
+              </p>
+            </div>
+
+            {reconciliationSnapshot.recentSyncActivity.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-600">
+                No recent webhook-driven inventory mutations are available yet.
+              </p>
+            ) : (
+              <div className="mt-4 grid gap-3">
+                {reconciliationSnapshot.recentSyncActivity
+                  .slice(0, 5)
+                  .map((entry) => {
+                    const changes = summarizeAuditChanges(entry).slice(0, 2);
+
+                    return (
+                      <div
+                        key={entry.id}
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-3"
+                      >
+                        <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">
+                              {entry.itemLabel ?? "Unknown inventory item"}
+                            </p>
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                              {entry.source} {entry.action}
+                            </p>
+                          </div>
+                          <p className="text-xs text-slate-500">
+                            {new Date(entry.created_at).toLocaleString()}
+                          </p>
+                        </div>
+
+                        {changes.length > 0 ? (
+                          <div className="mt-2 grid gap-1 text-sm text-slate-700">
+                            {changes.map((change) => (
+                              <p key={`${entry.id}-${change}`}>{change}</p>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-sm text-slate-600">
+                            No field-level diff was captured for this sync.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

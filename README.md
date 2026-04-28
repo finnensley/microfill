@@ -250,6 +250,22 @@ npm run webhook:shiphero:live:verify
 11. The verifier also prints the tenant's ShipHero integration state, including `last_synced_at` and `last_error`, so you can tell whether ShipHero reached the webhook route even when no inventory rows changed.
 12. If you need a narrower audit window after a resend, pass a timestamp filter such as `npm run webhook:shiphero:live:verify -- --since=2026-04-27T18:00:00Z`.
 
+## ShipHero MVP Design Note
+
+For the current MVP, the ShipHero webhook route stays synchronous on purpose. After HMAC verification, the route still normalizes the payload and applies inventory changes inside the request path rather than enqueueing work for a separate worker.
+
+This keeps local development and live-provider validation simpler, but it is a deliberate MVP tradeoff rather than the long-term design. ShipHero's webhook docs recommend immediate `2xx` responses plus asynchronous processing because persistent failures and timeouts can move a webhook into warning or unhealthy states.
+
+Version 2 should upgrade the ShipHero path in this order:
+
+1. Persist verified ShipHero webhook payloads to a queue table before inventory mutation work.
+2. Return a fast `2xx` response once the payload is verified and stored.
+3. Move inventory mutation work into a worker or scheduled job that reuses the existing normalization and sync logic.
+4. Track retry count, last error, and dead-letter status, keyed by tenant and `X-Shiphero-Message-ID` when present.
+5. Add periodic reconciliation against ShipHero API data so webhook delivery is not the only recovery path.
+
+Until that version 2 work lands, use the current ShipHero live-validation flow to confirm the MVP route is stable under realistic but low-volume delivery rather than treating it as production-hardened queue processing.
+
 ### Current Shopify Validation State
 
 As of April 18, 2026, live Shopify validation is confirmed for the current MVP path.

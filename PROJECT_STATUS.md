@@ -1,6 +1,6 @@
 # MicroFill Project Status
 
-**Last Updated:** April 18, 2026  
+**Last Updated:** April 27, 2026  
 **Stage:** Local MVP build-out  
 **Owner:** soloSoftwareDev LLC
 
@@ -46,6 +46,7 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 - Seeded local inventory data displays in the dashboard
 - Dashboard now supports operator updates for on-hand quantity, safety floor percent, and flash mode
 - Dashboard now shows recent tenant-scoped audit history with field-level change summaries
+- Dashboard now includes a reconciliation snapshot that highlights at-risk inventory rows and recent sync activity for operator review
 - Dashboard now supports tenant-scoped integration management for Shopify and ShipHero
 - Landing page lead capture writes into `leads`
 
@@ -68,6 +69,7 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 - Recorded ShipHero replay tooling now exists for PO receipt and shipment validation
 - ShipHero live-validation helper scripts now exist to prepare tenant config, smoke-test the tunnel, and verify recent tenant-scoped audit results
 - ShipHero webhook handling now persists tenant integration `last_synced_at` and `last_error` state for live-delivery diagnosis
+- ShipHero live prep now succeeds against the local tenant config; the remaining blocker before live validation is a fresh public tunnel URL because the prior Cloudflare hostname no longer resolves
 
 ## What Is Not Done
 
@@ -125,7 +127,9 @@ Definition of done:
 
 ### Priority 3: Finish ShipHero Inbound Flow
 
-**Status:** Recorded PO and shipment payload replays now succeed locally and verify inventory plus audit-log side effects. Live ShipHero prep, smoke-test, and verification tooling now exist, but real provider delivery is still pending.
+**Status:** Recorded PO and shipment payload replays now succeed locally and verify inventory plus audit-log side effects. Live ShipHero prep now succeeds against the seeded tenant config, but smoke-testing and real provider delivery are blocked until the expired Cloudflare tunnel URL is replaced with a fresh one.
+
+**Implementation decision:** Keep the current synchronous ShipHero webhook path for the MVP so live provider validation can complete without adding queue infrastructure first. Defer queue-backed retries and dead-letter handling to version 2.
 
 **Goal:** Validate the warehouse-side sync path using the existing RPC foundation.
 
@@ -138,13 +142,21 @@ Deliverables:
 - [ ] Add failure logging and an explicit retry strategy
 - [ ] Validate delivery from a live ShipHero source or tunnel
 
+Version 2 upgrade path:
+
+- Insert verified ShipHero webhooks into a tenant-scoped `webhook_events` or equivalent queue table before inventory mutation work
+- Return a fast `2xx` response after signature verification and persistence instead of performing full sync work in the webhook request
+- Process queued events in a worker or scheduled job that reuses the existing ShipHero normalization and inventory sync logic
+- Track queue status, attempt count, `X-Shiphero-Message-ID`, last error, and dead-letter state for repeated failures
+- Add reconciliation jobs against ShipHero API data so dropped or delayed webhooks do not become the only source of truth
+
 Definition of done:
 
 - Receiving and shipment payloads update inventory correctly without manual DB intervention
 
 ### Priority 4: Make The Dashboard Useful For Operators
 
-**Status:** Core operator controls and recent audit history are now implemented locally. Broader reconciliation views are still pending.
+**Status:** Core operator controls, recent audit history, and a reconciliation snapshot are now implemented locally.
 
 **Goal:** Move from read-only proof of life to a usable operations screen.
 
@@ -155,7 +167,7 @@ Deliverables:
 - [x] Flash mode toggle
 - [x] Search/filtering for inventory items
 - [x] Recent audit history panel
-- [ ] Reconciliation-focused summary/history UI
+- [x] Reconciliation-focused summary/history UI
 
 Definition of done:
 
@@ -181,7 +193,7 @@ Why:
 Resume checklist:
 
 - Confirm the local app is running with `npm run dev`.
-- Confirm the public tunnel URL used for live delivery is still current.
+- Start or refresh the public tunnel URL used for live delivery, then update `SHIPHERO_TUNNEL_URL` in `.env.local`.
 - Run `npm run webhook:shiphero:live:prepare` to sync the tenant integration and print the exact live webhook target.
 - Run `npm run webhook:shiphero:live:smoke` to verify the tunnel, secret, and account-ID mapping before the live provider resend.
 - Point the live ShipHero source or sandbox webhook at the active tunnel URL.
@@ -201,7 +213,9 @@ Resume checklist:
 ## Known Risks
 
 - ShipHero webhooks still exist before they are fully validated against production-like payloads
+- The MVP ShipHero route remains synchronous, so timeouts or repeated provider retries are still possible under heavier load until queue-backed processing is added in version 2
 - No dead-letter or retry queue means repeated failures can still drop operational events
+- The previously saved Cloudflare quick tunnel URL has expired, so live ShipHero smoke testing cannot proceed again until a fresh tunnel hostname is configured
 - Audit history is visible, but broader operator analytics and reconciliation views are still missing
 - Integration secrets/config can now be managed per tenant in the dashboard, and route coverage exists, but live ShipHero delivery is still unverified
 - Dashboard scale behavior is still unknown for large inventories
