@@ -1,16 +1,14 @@
 # MicroFill Project Status
 
 **Last Updated:** April 30, 2026  
-**Stage:** Queue-backed MVP — deployed to production  
+**Stage:** Outbound Shopify sync + paginated inventory — deployed to production  
 **Owner:** soloSoftwareDev LLC
 
 ---
 
 ## Current Position
 
-MicroFill now has a complete queue-backed webhook pipeline with crash resilience. All verified WMS payloads are enqueued on receipt and processed asynchronously by a Vercel Cron worker. The worker writes an `audit_logs` row on success linking each processed webhook to its inventory mutation. A reconciliation cron resets events stuck in `processing` back to `pending` every 15 minutes. The dashboard queue health panel auto-refreshes every 30 seconds.
-
-The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E tests run against production on every push to main via GitHub Actions.
+MicroFill now has a complete queue-backed webhook pipeline with crash resilience, outbound Shopify inventory sync, and server-side paginated inventory access. All verified WMS payloads are enqueued on receipt and processed asynchronously by a Vercel Cron worker. When a `stock_received` event is processed, the worker automatically pushes the updated available quantity to the Shopify REST API (best-effort, non-blocking). Operators can also trigger a full inventory sync manually from the dashboard's Shopify integration card. The inventory API supports server-side pagination (`page`, `pageSize`, `total`) and the dashboard renders pagination controls when results span multiple pages.
 
 ---
 
@@ -37,8 +35,21 @@ The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E 
 ### Dashboard And Data Access
 
 - `/dashboard` renders for authenticated users with inventory, audit history, and reconciliation snapshot
-- Integration management UI for Shopify and ShipHero tenant credentials
+- Integration management UI for Shopify and ShipHero tenant credentials; Shopify card includes **Inventory Location ID** field and **Sync inventory to Shopify** button
 - Dashboard surfaces ShipHero recovery guidance and exception-focused audit history filters
+- Inventory grid paginates server-side (Next/Prev controls, page + total display)
+
+### Outbound Shopify Inventory Sync
+
+- `src/services/shopify-sync.ts` — `pushInventoryToShopify({ tenantId, sku? })` fetches and caches `shopify_inventory_item_id` per variant, then calls `POST /admin/api/2024-10/inventory_levels/set.json` with `available = max(0, total - committed - safety_floor)`. Non-blocking; errors are logged but never thrown.
+- `src/app/api/inventory/shopify-sync/route.ts` — authenticated POST for manual full sync; returns `{ synced, skipped, errors }`
+- `inventory-sync.ts` — calls `pushInventoryToShopify` (best-effort) after every successful `stock_received` event
+- `supabase/migrations/20260430000100_add_shopify_inventory_item_id.sql` — adds `shopify_inventory_item_id TEXT` (nullable) to `inventory_items`
+
+### Server-Side Paginated Inventory
+
+- `src/app/api/inventory/route.ts` — GET accepts `?page=&pageSize=` (default 1/25, max pageSize 100); returns `{ items, page, pageSize, total }`
+- `src/hooks/use-inventory.ts` — exposes `{ page, totalPages, total, goToPage }` alongside existing state
 
 ### Universal WMS Adapter Architecture
 
@@ -96,6 +107,7 @@ The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E 
 
 - No live ShipHero delivery validated against production credentials
 - Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
+- Outbound Shopify sync requires `shopifyLocationId` set on the tenant's Shopify integration and a valid `api_key` (access token) with `write_inventory` scope
 
 ### Secondary Gaps
 
