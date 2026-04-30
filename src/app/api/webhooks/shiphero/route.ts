@@ -68,7 +68,8 @@ export async function POST(req: Request) {
       integration?.tenant_id ?? tenantHeader ?? shopIdHeader;
     const webhookSecret =
       integration?.webhook_secret ??
-      getRequiredEnv(shipHeroAdapter.getEnvSecretKey());
+      process.env[shipHeroAdapter.getEnvSecretKey()] ??
+      null;
 
     if (!resolvedTenantId) {
       console.error("Unable to resolve tenant for ShipHero webhook");
@@ -76,6 +77,11 @@ export async function POST(req: Request) {
         { error: "Missing tenant identifier" },
         { status: 400 },
       );
+    }
+
+    if (!webhookSecret) {
+      console.error("No webhook secret available to verify ShipHero signature");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!shipHeroAdapter.verifySignature(rawBody, webhookSecret, hmacHeader)) {
