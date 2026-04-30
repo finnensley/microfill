@@ -122,3 +122,49 @@ export async function markEventFailed(
     console.error(`Failed to schedule retry for event ${id}:`, error.message);
   }
 }
+
+/**
+ * Write an audit_logs row linking a successfully processed webhook event to
+ * the inventory mutation it caused.
+ *
+ * Uses source='webhook_queue' and stores event context in new_values so the
+ * record can be correlated with inventory_items audit entries by tenant and
+ * timestamp.
+ *
+ * Failures are logged but do not throw — audit linkage is best-effort and
+ * must not block the worker's success path.
+ */
+export async function writeQueueAuditLog(
+  event: WebhookEventRow,
+): Promise<void> {
+  try {
+    const supabase = createServerSupabaseClient();
+
+    const { error } = await supabase.from("audit_logs").insert({
+      tenant_id: event.tenant_id,
+      action: "UPDATE",
+      source: "webhook_queue",
+      new_values: {
+        webhook_event_id: event.id,
+        provider: event.provider,
+        event_type: event.event_type ?? null,
+        external_id: event.external_id ?? null,
+        attempts: event.attempts,
+        processed_at: new Date().toISOString(),
+      },
+    });
+
+    if (error) {
+      console.error(
+        `Failed to write audit log for webhook event ${event.id}:`,
+        error.message,
+      );
+    }
+  } catch (err) {
+    // Audit log writes are best-effort. Never block the success path.
+    console.error(
+      `Unexpected error writing audit log for webhook event ${event.id}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}

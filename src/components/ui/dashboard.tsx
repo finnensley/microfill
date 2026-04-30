@@ -349,6 +349,8 @@ export default function InventoryDashboard({
 
   useEffect(() => {
     void refreshQueueStatus();
+    const interval = setInterval(() => void refreshQueueStatus(), 30_000);
+    return () => clearInterval(interval);
   }, [refreshQueueStatus]);
 
   const refreshAuditHistory = useCallback(async () => {

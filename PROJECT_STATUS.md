@@ -8,9 +8,9 @@
 
 ## Current Position
 
-MicroFill now has a complete queue-backed webhook pipeline. All verified WMS payloads are enqueued immediately on receipt and processed asynchronously by a Vercel Cron worker at `/api/queue/process`. The ShipHero route returns `{ queued: true }` in under 200 ms and the worker handles normalization, inventory sync, retry scheduling, and dead-letter promotion.
+MicroFill now has a complete queue-backed webhook pipeline with crash resilience. All verified WMS payloads are enqueued on receipt and processed asynchronously by a Vercel Cron worker. The worker writes an `audit_logs` row on success linking each processed webhook to its inventory mutation. A reconciliation cron resets events stuck in `processing` back to `pending` every 15 minutes. The dashboard queue health panel auto-refreshes every 30 seconds.
 
-The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E infrastructure is in place. The hosted Supabase project has been reactivated and the pending migrations can be applied with `npm run supabase:push`.
+The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E tests run against production on every push to main via GitHub Actions.
 
 ---
 
@@ -52,14 +52,16 @@ The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E 
 
 ### Queue-Backed Webhook Pipeline
 
-- `src/services/webhook-queue.ts` — `enqueueWebhookEvent`, `claimNextBatch`, `markEventSucceeded`, `markEventFailed`
-- `src/app/api/queue/process/route.ts` — Vercel Cron worker protected by `CRON_SECRET`; claims batch → adapter normalize → `processSyncEventsBatch` → mark succeeded/failed per event; exponential retry delay; dead-letters after `max_attempts`
+- `src/services/webhook-queue.ts` — `enqueueWebhookEvent`, `claimNextBatch`, `markEventSucceeded`, `markEventFailed`, `writeQueueAuditLog`
+- `src/app/api/queue/process/route.ts` — Vercel Cron worker protected by `CRON_SECRET`; claims batch → adapter normalize → `processSyncEventsBatch` → mark succeeded/failed per event; writes `audit_logs` row on success; exponential retry delay; dead-letters after `max_attempts`
+- `src/app/api/queue/reconcile/route.ts` — POST protected by `CRON_SECRET`; finds events stuck in `processing` > 10 min and resets them to `pending` to survive worker crashes
 - `src/app/api/webhooks/shiphero/route.ts` — thin: verify HMAC → enqueue → return `{ queued: true, eventId, verified: true }` in ~150 ms
-- `src/app/api/webhooks/shopify/route.ts` — thin: verify HMAC → enqueue → return `{ queued: true, eventId, verified: true }` (queue-backed, migrated from inline sync)
+- `src/app/api/webhooks/shopify/route.ts` — thin: verify HMAC → enqueue → return `{ queued: true, eventId, verified: true }` (queue-backed)
 - `src/app/api/queue/status/route.ts` — authenticated endpoint returning per-status counts + recent failures for the dashboard panel
 - `src/app/api/health/route.ts` — unauthenticated liveness probe; queries DB and returns `{ ok, db, timestamp }`
 - `vercel.json` — cron config: `/api/queue/process` every minute
 - `.github/workflows/process-queue.yml` — GitHub Actions fallback cron (every 5 min) for queue worker
+- `.github/workflows/reconcile-queue.yml` — GitHub Actions cron (every 15 min) calling `/api/queue/reconcile` to reset stuck events
 - `.github/workflows/keep-supabase-active.yml` — pings `/api/health` every 5 days to prevent Supabase free-tier pause
 
 ### Automated Coverage
@@ -75,6 +77,7 @@ The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E 
 - `tests/__mocks__/server-only.ts` stub so API route test files can be imported by Vitest
 - `.github/workflows/route-validation.yml` — Vitest runs on every push and PR
 - `.github/workflows/e2e-smoke.yml` — Playwright E2E runs against production on every push to main
+- Dashboard queue health panel auto-refreshes every 30 seconds (no manual refresh required)
 
 ### Deployment Setup
 

@@ -6,6 +6,7 @@ import {
   claimNextBatch,
   markEventSucceeded,
   markEventFailed,
+  writeQueueAuditLog,
 } from "@/services/webhook-queue";
 import { processSyncEventsBatch } from "@/services/inventory-sync";
 import type { WmsProvider } from "@/services/wms-adapters/types";
@@ -100,6 +101,7 @@ export async function POST(req: Request) {
       if (normalized.events.length === 0) {
         // Nothing to process (empty line items) — mark done
         await markEventSucceeded(event.id);
+        await writeQueueAuditLog(event);
         succeeded++;
         continue;
       }
@@ -129,6 +131,7 @@ export async function POST(req: Request) {
           });
         }
         await markEventSucceeded(event.id);
+        await writeQueueAuditLog(event);
         succeeded++;
       }
     } catch (err) {
