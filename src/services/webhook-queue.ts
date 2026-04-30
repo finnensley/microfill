@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import type { Json } from "@/types/supabase";
 import type {
   WebhookEventInsert,
   WebhookEventRow,
@@ -31,7 +32,7 @@ export async function enqueueWebhookEvent(
       event_type: event.event_type ?? null,
       external_id: event.external_id ?? null,
       provider_message_id: event.provider_message_id ?? null,
-      payload: event.payload,
+      payload: event.payload as Json,
       max_attempts: event.max_attempts ?? DEFAULT_MAX_ATTEMPTS,
     })
     .select()

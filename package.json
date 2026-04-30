@@ -27,7 +27,7 @@
     "webhook:shiphero:live:verify": "node scripts/verify-shiphero-live-validation.mjs",
     "deploy:check": "node scripts/check-deploy-env.mjs",
     "supabase:link": "npx supabase link",
-    "supabase:push": "npx supabase db push",
+    "supabase:push": "SUPABASE_DB_PASSWORD=$SUPABASE_DB_PASSWORD npx supabase db push",
     "test:queue": "vitest run tests/api/webhook-queue.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
