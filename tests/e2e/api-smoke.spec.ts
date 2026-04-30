@@ -86,4 +86,26 @@ test.describe("webhook API endpoints", () => {
     const response = await request.get("/api/inventory");
     expect(response.status()).toBe(401);
   });
+
+  test("health endpoint returns 200 with db status", async ({ request }) => {
+    const response = await request.get("/api/health");
+    expect(response.status()).toBe(200);
+    const body = await response.json();
+    expect(body).toMatchObject({ ok: true, db: true });
+    expect(typeof body.timestamp).toBe("string");
+  });
+
+  test("queue status returns 401 for unauthenticated requests", async ({
+    request,
+  }) => {
+    const response = await request.get("/api/queue/status");
+    expect(response.status()).toBe(401);
+  });
+
+  test("Shopify HEAD request returns 200 (health probe)", async ({
+    request,
+  }) => {
+    const response = await request.head("/api/webhooks/shopify");
+    expect(response.status()).toBe(200);
+  });
 });

@@ -1,7 +1,7 @@
 # MicroFill Project Status
 
 **Last Updated:** April 30, 2026  
-**Stage:** Queue-backed MVP — deployment ready  
+**Stage:** Queue-backed MVP — deployed to production  
 **Owner:** soloSoftwareDev LLC
 
 ---
@@ -45,25 +45,36 @@ The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E 
 - `WmsAdapter` interface is the single integration contract — `hmacHeader`, `verifySignature()`, `normalize()`, `getExternalAccountId()`, `getEnvSecretKey()`
 - `WmsProvider` union type (`"shopify" | "shiphero" | "fishbowl" | "netsuite"`) is the single source of truth
 - `src/services/wms-adapters/shiphero.ts` — production-ready ShipHero adapter
+- `src/services/wms-adapters/shopify.ts` — production-ready Shopify adapter; `normalize()` returns `order_committed` events keyed by variant ID
 - `src/services/wms-adapters/fishbowl.ts` — Fishbowl stub (registered, safe stub that returns `false` from `verifySignature` until implemented)
 - Adapter registry at `src/services/wms-adapters/index.ts`
+- `InventoryEvent` supports `stock_received`, `stock_shipped`, and `order_committed` (Shopify) event types
 
 ### Queue-Backed Webhook Pipeline
 
 - `src/services/webhook-queue.ts` — `enqueueWebhookEvent`, `claimNextBatch`, `markEventSucceeded`, `markEventFailed`
 - `src/app/api/queue/process/route.ts` — Vercel Cron worker protected by `CRON_SECRET`; claims batch → adapter normalize → `processSyncEventsBatch` → mark succeeded/failed per event; exponential retry delay; dead-letters after `max_attempts`
 - `src/app/api/webhooks/shiphero/route.ts` — thin: verify HMAC → enqueue → return `{ queued: true, eventId, verified: true }` in ~150 ms
+- `src/app/api/webhooks/shopify/route.ts` — thin: verify HMAC → enqueue → return `{ queued: true, eventId, verified: true }` (queue-backed, migrated from inline sync)
+- `src/app/api/queue/status/route.ts` — authenticated endpoint returning per-status counts + recent failures for the dashboard panel
+- `src/app/api/health/route.ts` — unauthenticated liveness probe; queries DB and returns `{ ok, db, timestamp }`
 - `vercel.json` — cron config: `/api/queue/process` every minute
+- `.github/workflows/process-queue.yml` — GitHub Actions fallback cron (every 5 min) for queue worker
+- `.github/workflows/keep-supabase-active.yml` — pings `/api/health` every 5 days to prevent Supabase free-tier pause
 
 ### Automated Coverage
 
 - 28 Vitest unit tests across 4 test files — all passing
   - `tests/api/inventory-routes.test.ts` (3)
   - `tests/api/integrations-route.test.ts` (5)
-  - `tests/api/webhooks-route.test.ts` (11) — ShipHero tests now assert `enqueueWebhookEvent` is called and response is `{ queued: true }`
+  - `tests/api/webhooks-route.test.ts` (11) — both ShipHero and Shopify tests assert `enqueueWebhookEvent` is called; response is `{ queued: true }`
   - `tests/api/webhook-queue.test.ts` (9) — worker auth, empty queue, success, retry, dead-letter, no adapter, adapter throws
+- 11 Playwright E2E tests against production (`https://microfill.vercel.app`)
+  - `tests/e2e/public-pages.spec.ts` — title, login page, dashboard redirect, onboarding redirect
+  - `tests/e2e/api-smoke.spec.ts` — webhook 400/401 responses, queue worker auth, integrations/inventory 401, health check, queue status 401, Shopify HEAD probe
 - `tests/__mocks__/server-only.ts` stub so API route test files can be imported by Vitest
-- `playwright.config.ts` and E2E test files in `tests/e2e/` ready to run against a live server
+- `.github/workflows/route-validation.yml` — Vitest runs on every push and PR
+- `.github/workflows/e2e-smoke.yml` — Playwright E2E runs against production on every push to main
 
 ### Deployment Setup
 
@@ -80,15 +91,14 @@ The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E 
 
 ### Highest Priority Gaps
 
-- Pending migrations not yet applied to hosted Supabase (`20260429000100` rename + `20260429000200` queue table) — run `npm run supabase:link` then `npm run supabase:push`
 - No live ShipHero delivery validated against production credentials
 - Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
 
 ### Secondary Gaps
 
-- No Playwright E2E runs yet (infrastructure ready; requires live server)
 - No alerting or anomaly-detection channels beyond audit trail and `webhook_events` status
 - No automated reconciliation jobs for dropped/delayed webhooks
+- Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
 
 ---
 
