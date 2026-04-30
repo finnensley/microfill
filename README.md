@@ -33,15 +33,17 @@ What is implemented and validated today:
 - local Docker-backed Supabase development with seeded tenant data
 - authenticated tenant-scoped dashboard access
 - operator controls for quantity, safety floors, flash mode, and reconciliation review
-- inbound Shopify webhook processing with confirmed live delivery against a real development store
-- inbound ShipHero replay tooling plus live prepare and tunnel smoke validation
+- **Queue-backed, asynchronous webhook processing** for both Shopify and ShipHero, with dead-letter handling and crash-resilient workers.
+- **Outbound inventory synchronization** to Shopify, which can be triggered manually or runs automatically after stock-received events.
+- A universal **WMS adapter architecture** that supports Shopify, ShipHero, and can be extended to other providers like Fishbowl.
+- Server-side paginated inventory APIs and corresponding UI controls in the dashboard.
+- Comprehensive Vitest and Playwright test suites integrated into CI/CD workflows.
 - audit history, integration status tracking, and retry/recovery guidance for inbound flows
 
 What is explicitly not production-ready yet:
 
+- The outbound Shopify sync is built and deployed, but requires a Shopify Admin API access token to be fully activated.
 - real ShipHero provider delivery validation with production-issued credentials
-- queue-backed webhook workers, dead-letter handling, and recovery jobs
-- outbound inventory synchronization workflows
 - reporting, alerting, anomaly detection, and transactional email delivery
 - browser-level end-to-end coverage and deployment hardening
 
@@ -73,22 +75,15 @@ The platform is built around:
 The repository is not yet at the full production target above. Today, the local build already includes:
 
 - Local Docker-backed Supabase development workflow
+- A queue-backed webhook pipeline using a `webhook_events` table and `SELECT FOR UPDATE SKIP LOCKED` for safe concurrent processing.
+- Asynchronous processing of all inbound webhooks via a Vercel Cron worker, with graceful retry and dead-letter logic.
+- Outbound inventory synchronization to Shopify, pushing available quantity changes based on warehouse events.
+- A universal WMS adapter architecture to normalize data from different providers (Shopify, ShipHero, etc.).
 - Working email sign-in with both magic-link and manual OTP paths
-- Logout flow for authenticated dashboard and onboarding sessions
-- Protected dashboard and onboarding flow
-- Server-side tenant-aware inventory reads
-- Seeded local inventory data and generated database types
-- Tenant-scoped integration storage for Shopify and ShipHero configuration
-- Recorded Shopify webhook replay tooling with database and audit-log verification
-- Recorded ShipHero PO and shipment replay tooling with database and audit-log verification
-- Protected dashboard controls for quantity, safety floor, flash mode, and inventory filtering
-- Protected dashboard integration management for Shopify and ShipHero credentials, webhook secrets, and activation state
-- Dashboard audit history with field-level change summaries for recent inventory mutations
-- Dashboard reconciliation snapshot, exception review, and ShipHero recovery guidance for operators
-- Automated Vitest route coverage for the dashboard APIs and webhook handlers
-- Shopify webhook handling is hardened against null `variant_id` line items discovered during live-store testing
-- ShipHero webhook handling now persists retry context, integration status, and tunnel-smoke diagnostics for operator follow-up
-- Live Shopify delivery is confirmed for the current MVP path, and ShipHero tunnel smoke is confirmed against the live webhook URL
+- Protected dashboard and onboarding flow with server-side tenant-aware data access.
+- Dashboard controls for inventory, integrations, audit history, and reconciliation.
+- Automated Vitest and Playwright test coverage for API routes and E2E flows.
+- Live Shopify delivery is confirmed, and ShipHero tunnel smoke tests are confirmed against the live webhook URL.
 
 Detailed execution status, current gaps, and next build priorities are tracked in [PROJECT_STATUS.md](/Users/finnensley/solo-work/microfill/PROJECT_STATUS.md).
 
@@ -96,7 +91,7 @@ Detailed execution status, current gaps, and next build priorities are tracked i
 
 The repository is organized around these areas:
 
-```text
+````text
 /src
 ├── app/api/webhooks        # Shopify and ShipHero webhook entry points
 ├── app/(auth)              # Auth routes and login UI
@@ -105,21 +100,26 @@ The repository is organized around these areas:
 ├── components/ui           # Dashboard and shared UI
 ├── components/forms        # Login and onboarding forms
 ├── hooks                   # Client hooks such as inventory loading
+├── lib     health          # Unauthenticated liveness probe
+├── app/api/integrations    # API for managing integrations
+├── app/api/inventory       # API for inventory data and Shopify sync
+├── app/api/queue           # Webhook queue processing and status APIs
+├── app/api/webhooks        # Shopify and ShipHero webhook entry points
+├── app/(auth)              # Auth routes and login UI
+├── app/dashboard           # Protected dashboard route
+├── app/onboarding          # Tenant assignment flow
+├── components/ui           # Dashboard and shared UI
+├── components/forms        # Login and onboarding forms
+├── hooks                   # Client hooks such as inventory loading
 ├── lib                     # Browser, server, and SSR auth Supabase clients
-├── services                # Inventory sync and future integration wrappers
-└── types                   # Strict TypeScript and generated Supabase types
-```
-
-## Local Development Setup
-
-While the hosted Supabase project is paused, local Docker-backed Supabase is the default development workflow for this repository.
-
+├── services                # Core business logic for sync and queueing
+├── services/wms-adapters   # Adapters for different WMS provid
 1. Install Docker Desktop and the Supabase CLI.
 2. Install dependencies:
 
 ```bash
 npm install
-```
+````
 
 3. Start the local Supabase stack:
 
@@ -282,21 +282,13 @@ Current verified state for this workflow:
 
 ## ShipHero MVP Design Note
 
-For the current MVP, the ShipHero webhook route stays synchronous on purpose. After HMAC verification, the route still normalizes the payload and applies inventory changes inside the request path rather than enqueueing work for a separate worker.
+ForWebhook Architecture
 
-This keeps local development and live-provider validation simpler, but it is a deliberate MVP tradeoff rather than the long-term design. ShipHero's webhook docs recommend immediate `2xx` responses plus asynchronous processing because persistent failures and timeouts can move a webhook into warning or unhealthy states.
+The webhook ingestion pipeline is designed for high-concurrency and resilience. All inbound webhooks from providers like Shopify and ShipHero are handled asynchronously.
 
-Version 2 should upgrade the ShipHero path in this order:
+Upon receipt, the webhook route's only jobs are to verify the HMAC signature and enqueue the raw event into a dedicated `webhook_events` database table. It then immediately returns a `202 Accepted` response to the provider. This ensures that even during a massive traffic spike, webhook providers receive a fast response, preventing timeouts and retries.
 
-1. Persist verified ShipHero webhook payloads to a queue table before inventory mutation work.
-2. Return a fast `2xx` response once the payload is verified and stored.
-3. Move inventory mutation work into a worker or scheduled job that reuses the existing normalization and sync logic.
-4. Track retry count, last error, and dead-letter status, keyed by tenant and `X-Shiphero-Message-ID` when present.
-5. Add periodic reconciliation against ShipHero API data so webhook delivery is not the only recovery path.
-
-Until that version 2 work lands, use the current ShipHero live-validation flow to confirm the MVP route is stable under realistic but low-volume delivery rather than treating it as production-hardened queue processing.
-
-### Current Shopify Validation State
+A separate, out-of-band worker, triggered by a Vercel Cron Job, processes the queue. It claims a batch of events using a `SELECT FOR UPDATE SKIP LOCKED` pattern to prevent race conditions between multiple worker instances. Each event is normalized through a provider-specific WMS adapter and then processed. The system includes exponential backoff for retries and moves events to a dead-letter state after multiple failures, which can be inspected from the dashboard. This architecture ensures that event processing is reliable and does not block the inbound ingestion of new events
 
 As of April 18, 2026, live Shopify validation is confirmed for the current MVP path.
 
@@ -308,33 +300,24 @@ As of April 18, 2026, live Shopify validation is confirmed for the current MVP p
 - The Shopify webhook route was patched after live traffic exposed a case where `line_items[*].variant_id` can be `null`.
 - Focused route validation currently passes for the webhook and dashboard API test slices used during live validation work.
 - A real Shopify delivery was confirmed on April 18, 2026 and produced these local mutations:
-  - `SKU-DEMO-BLUE`: `committed_quantity = 4 -> 5`
-  - `SKU-DEMO-RED`: `committed_quantity = 8 -> 9`
-- The live-validation workflow now includes `npm run webhook:shopify:live:verify` so the mapped SKUs and recent tenant-scoped audit entries can be checked without hand-written SQL.
+  - `SKU-DEM30, 2026, the Shopify integration is validated for both inbound and outbound data flows.
 
-If Shopify's admin-side "Send test" action produces no database change, inspect the delivery payload before assuming the route failed. In this session, synthetic test deliveries sometimes used placeholder or unmatched variant IDs, which correctly resulted in skipped line items instead of inventory mutations.
-
-### Current ShipHero Validation State
-
-As of April 28, 2026, the ShipHero path is partially validated for the current MVP route.
-
-- Recorded `PO Update` and `Shipment Update` payload replays succeed locally.
-- The webhook route now accepts documented ShipHero HMAC headers and nested payload envelopes while preserving local replay compatibility.
-- The live prepare command prints the active webhook target and tracked SKUs for validation.
-- The live smoke command succeeds through the active Cloudflare tunnel, proving public reachability and signed local webhook handling.
-- The route now records integration `last_synced_at`, `last_error`, and retry/recovery guidance for operator diagnosis.
+- **Inbound:** Live Shopify order creation webhooks are successfully received, enqueued, and processed, resulting in correct `committed_quantity` updates.
+- **Outbound:** The inventory sync logic to push available stock levels back to Shopify is implemented and deployed. This feature is pending activation via a Shopify Admin API access token.
+- The active development store is `microfill-2.myshopify.com`.
+- The webhook route has been hardened against edge cases discovered during live testing, such as `null` variant IDs.
+- The live-validation workflow includes scripts to prepare, smoke-test, and verify the integration
 - A real provider-initiated ShipHero delivery is still the remaining validation gap.
 
 ## Current Local Auth Flow
 
-- `/login` supports email sign-in for local development.
-- Email-based Supabase Auth is the chosen MVP auth strategy for the first production release.
-- Users can continue by clicking the magic link or by manually entering the one-time code from the same email.
-- `/dashboard` is protected by middleware and redirects to `/login` when no session is present.
-- Authenticated users can sign out from `/dashboard` and `/onboarding`.
-- `/onboarding` explicitly assigns a tenant to the current user when no assignment exists yet.
-- Inventory reads resolve tenant access on the server using the authenticated user context and explicit tenant assignment records.
-- Tenant choices come from the `tenants` table, not from inventory records.
+- `/login` s30, 2026, the ShipHero path is partially validated.
+
+- Recorded `PO Update` and `Shipment Update` payloads are successfully ingested via the asynchronous queue pipeline.
+- The webhook route correctly verifies ShipHero HMAC signatures.
+- Live "smoke tests" through a public tunnel succeed, confirming the endpoint is reachable and can process signed requests.
+- The integration correctly records sync status and errors for operator diagnosis.
+- The final validation step—confirming delivery from a real, provider-initiated ShipHero webhook—is still pending production credentials
 - `/dashboard` now includes tenant-scoped integration settings so operators can manage Shopify and ShipHero configuration without manual SQL edits.
 
 ## Planned Scope Beyond The Current Build
