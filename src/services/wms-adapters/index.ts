@@ -1,0 +1,20 @@
+import type { WmsAdapter, WmsProvider } from "./types";
+import { shipHeroAdapter } from "./shiphero";
+
+export type { WmsAdapter, WmsNormalizedPayload, WmsProvider } from "./types";
+
+/**
+ * Registry of all active WMS adapters.
+ * Add new adapters here after creating their adapter file.
+ */
+const registry: Partial<Record<WmsProvider, WmsAdapter>> = {
+  shiphero: shipHeroAdapter,
+};
+
+/**
+ * Return the WMS adapter for a given provider, or null if not registered.
+ * Use this in webhook routes to access provider-specific HMAC and normalization logic.
+ */
+export function getWmsAdapter(provider: WmsProvider): WmsAdapter | null {
+  return registry[provider] ?? null;
+}

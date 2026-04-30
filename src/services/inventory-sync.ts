@@ -1,18 +1,19 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import type { WmsProvider } from "@/services/wms-adapters/types";
 
 /**
- * Normalized inventory event - works for ANY WMS
- * Keeps webhook handlers simple, centralizes business logic
+ * Normalized inventory event - works for ANY WMS.
+ * Keeps webhook handlers simple and centralizes business logic.
  */
 export interface InventoryEvent {
   type: "stock_received" | "stock_shipped";
   sku: string;
   quantity: number;
-  source: "shopify" | "shiphero" | "fishbowl" | "netsuite"; // Track WMS origin
+  source: WmsProvider;
   externalId: string; // WMS order/PO number for audit trail
-  tenantId: string; // Required for multi-tenancy: Shopify shop_id, warehouse_id, etc.
+  tenantId: string; // Required for multi-tenancy
   timestamp?: Date;
 }
 
@@ -48,7 +49,7 @@ export async function processSyncEvent(
         qty_received: event.quantity,
       };
       const { error } = await supabase.rpc(
-        "sync_shiphero_receiving",
+        "sync_wms_stock_received",
         receivingArgs,
       );
 
@@ -73,7 +74,7 @@ export async function processSyncEvent(
         qty_shipped: event.quantity,
       };
       const { error } = await supabase.rpc(
-        "sync_shiphero_shipment",
+        "sync_wms_stock_shipped",
         shipmentArgs,
       );
 

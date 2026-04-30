@@ -1,6 +1,6 @@
 # MicroFill Project Status
 
-**Last Updated:** April 28, 2026  
+**Last Updated:** April 29, 2026  
 **Stage:** Local MVP build-out  
 **Owner:** soloSoftwareDev LLC
 
@@ -28,6 +28,7 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 - Additional working tables exist for `leads`, `tenants`, and `user_tenant_assignments`
 - `audit_logs` table and `inventory_items` audit trigger are now in place for insert, update, and delete traceability
 - `integrations` table now exists for tenant-scoped Shopify and ShipHero credentials/configuration
+- Universal WMS adapter architecture is now in place: `WmsProvider` is the single source of truth for provider identity, DB sync functions are renamed to generic `sync_wms_stock_received` and `sync_wms_stock_shipped`, and the ShipHero route delegates HMAC verification and payload normalization to a `WmsAdapter` interface in `src/services/wms-adapters/`
 
 ### Auth And Access
 
@@ -79,6 +80,7 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 
 - ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
 - No live third-party delivery validation exists yet for ShipHero
+- No additional WMS adapters exist yet beyond ShipHero (Fishbowl, NetSuite, etc. are registered as provider types but have no adapter implementations)
 
 ### Secondary Gaps
 
@@ -193,30 +195,26 @@ Definition of done:
 
 ## Recommended Execution Order
 
-1. Create the initial ShipHero queue foundation file set without changing the current synchronous MVP route behavior.
+1. Add a second WMS adapter (Fishbowl or NetSuite stub) to prove the universal adapter pattern works end-to-end for a new provider.
 2. Validate live ShipHero delivery against a tunnel or sandbox source.
 3. Add deployment and browser-level validation milestones for the production-readiness gap list.
 4. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 
-**Best next task:** create the initial ShipHero queue foundation file set while preserving the current synchronous MVP route.
+**Best next task:** validate live ShipHero delivery or add a second WMS adapter.
 
 Why:
 
-- The queue-backed version 2 architecture is the clearest internal production-readiness gap that can be advanced immediately without waiting on external credentials.
-- The current ShipHero route is still synchronous, so queue persistence, worker ownership, and retry/dead-letter contracts are not established yet.
-- Live Shopify delivery has now been confirmed against the mapped local variants with fresh `committed_quantity` and `audit_logs` mutations.
-- Recorded ShipHero flows already pass locally, and the tunnel smoke test already proves the public webhook path is reachable with the current local secret/account configuration.
-- Real ShipHero provider delivery still matters, but that work remains partially dependent on external credentials and account identifiers.
+- The universal adapter architecture is now in place. Adding a new WMS (Fishbowl, NetSuite, Deposco, etc.) only requires: a type definition file, an adapter file implementing `WmsAdapter`, registration in the adapter registry, and a new webhook route. No changes to shared infrastructure are needed.
+- The ShipHero route is now thin and adapter-driven. All 20 Vitest tests pass.
+- The remaining gap is either live ShipHero delivery (requires provider credentials) or a second adapter implementation to prove the pattern works for a different WMS.
 
 Resume checklist:
 
-- Create a migration for a tenant-scoped `webhook_events` queue table with status, attempts, retry timing, last error, and payload metadata.
-- Add shared queue and processing types for queued ShipHero webhook events.
-- Add a queue service for enqueue, claim, mark-succeeded, mark-failed, and retry scheduling operations.
-- Add a worker entry point or processing module that can reuse the future shared ShipHero normalization and inventory sync logic.
-- Add focused tests for queue persistence and retry/dead-letter transitions before wiring the route to the queue.
+- If pursuing live ShipHero delivery: obtain provider credentials and run `npm run webhook:shiphero:live:prepare` then `npm run webhook:shiphero:live:smoke`.
+- If pursuing a second adapter: create `src/types/<provider>.ts` + `src/services/wms-adapters/<provider>.ts`, register in `src/services/wms-adapters/index.ts`, and add a route at `src/app/api/webhooks/<provider>/route.ts`.
+- Either path: add the new provider to `managedIntegrationProviders` in `src/types/integrations.ts` if it needs dashboard integration management.
 
 ## Open Decisions
 

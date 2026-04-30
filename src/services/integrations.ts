@@ -2,12 +2,10 @@ import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { Database } from "@/types/supabase";
+import type { WmsProvider } from "@/services/wms-adapters/types";
 
-export type IntegrationProvider =
-  | "shopify"
-  | "shiphero"
-  | "fishbowl"
-  | "netsuite";
+/** All supported integration providers. Sourced from the WMS adapter registry. */
+export type IntegrationProvider = WmsProvider;
 
 type IntegrationRow = Database["public"]["Tables"]["integrations"]["Row"];
 

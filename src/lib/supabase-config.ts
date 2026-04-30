@@ -41,3 +41,11 @@ export function getShopifyWebhookSecret() {
 export function getShipHeroWebhookSecret() {
   return requireEnv("SHIPHERO_WEBHOOK_SECRET");
 }
+
+/**
+ * Generic accessor for any webhook secret by env var key name.
+ * Use this in WMS webhook routes via adapter.getEnvSecretKey().
+ */
+export function getRequiredEnv(name: string): string {
+  return requireEnv(name);
+}

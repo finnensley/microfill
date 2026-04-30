@@ -1,6 +1,16 @@
 import { Database } from "@/types/supabase";
+import type { WmsProvider } from "@/services/wms-adapters/types";
 
-export type ManagedIntegrationProvider = "shopify" | "shiphero";
+export type { WmsProvider };
+
+/**
+ * Subset of WmsProvider values that are actively managed through the dashboard UI.
+ * Not all registered WMS adapters need a managed integration record.
+ */
+export type ManagedIntegrationProvider = Extract<
+  WmsProvider,
+  "shopify" | "shiphero"
+>;
 
 export const managedIntegrationProviders: ManagedIntegrationProvider[] = [
   "shopify",
