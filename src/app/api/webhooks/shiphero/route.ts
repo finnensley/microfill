@@ -58,11 +58,19 @@ export async function POST(req: Request) {
 
     const bodyAccountId = shipHeroAdapter.getExternalAccountId(rawBody);
 
-    const integration = await resolveIntegration({
-      provider: "shiphero",
-      tenantId: tenantHeader,
-      externalAccountId: shipHeroAccountId ?? shopIdHeader ?? bodyAccountId,
-    });
+    let integration = null;
+    try {
+      integration = await resolveIntegration({
+        provider: "shiphero",
+        tenantId: tenantHeader,
+        externalAccountId: shipHeroAccountId ?? shopIdHeader ?? bodyAccountId,
+      });
+    } catch (err) {
+      console.warn(
+        "ShipHero integration lookup failed, proceeding with env fallback",
+        err,
+      );
+    }
 
     const resolvedTenantId =
       integration?.tenant_id ?? tenantHeader ?? shopIdHeader;
