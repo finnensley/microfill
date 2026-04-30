@@ -1,16 +1,18 @@
 # MicroFill Project Status
 
-**Last Updated:** April 29, 2026  
-**Stage:** Local MVP build-out  
+**Last Updated:** April 30, 2026  
+**Stage:** Queue-backed MVP — deployment ready  
 **Owner:** soloSoftwareDev LLC
 
 ---
 
 ## Current Position
 
-MicroFill now runs locally against Docker-backed Supabase and has a working auth, onboarding, and dashboard baseline. The project is past setup and schema bootstrapping. The main work is now turning the local prototype into an operator-ready MVP with tested Shopify and ShipHero flows.
+MicroFill now has a complete queue-backed webhook pipeline. All verified WMS payloads are enqueued immediately on receipt and processed asynchronously by a Vercel Cron worker at `/api/queue/process`. The ShipHero route returns `{ queued: true }` in under 200 ms and the worker handles normalization, inventory sync, retry scheduling, and dead-letter promotion.
 
-Live Shopify validation is now confirmed end-to-end: a real Shopify delivery reached the local route through the Cloudflare tunnel, matched the mapped store variants, and produced the expected tenant-scoped `committed_quantity` and `audit_logs` mutations locally. The main remaining integration risk is now live ShipHero delivery.
+The codebase has 28 unit tests across 4 test files, all passing. Playwright E2E infrastructure is in place. The hosted Supabase project has been reactivated and the pending migrations can be applied with `npm run supabase:push`.
+
+---
 
 ## What Works Right Now
 
@@ -18,187 +20,120 @@ Live Shopify validation is now confirmed end-to-end: a real Shopify delivery rea
 
 - Next.js app runs locally with the Supabase local stack
 - Local Supabase config, seed data, scripts, and env workflow are in place
-- Local auth email template is customized for the current sign-in flow
 
 ### Database
 
-- `inventory_items` schema supports atomic buffering, safety floors, flash mode, and tenant scoping
-- Multi-tenant support exists with tenant-aware indexes and RLS-oriented design
-- Core RPC functions exist for ShipHero receipt and shipment syncing
-- Additional working tables exist for `leads`, `tenants`, and `user_tenant_assignments`
-- `audit_logs` table and `inventory_items` audit trigger are now in place for insert, update, and delete traceability
-- `integrations` table now exists for tenant-scoped Shopify and ShipHero credentials/configuration
-- Universal WMS adapter architecture is now in place: `WmsProvider` is the single source of truth for provider identity, DB sync functions are renamed to generic `sync_wms_stock_received` and `sync_wms_stock_shipped`, and the ShipHero route delegates HMAC verification and payload normalization to a `WmsAdapter` interface in `src/services/wms-adapters/`
+- `inventory_items`, `integrations`, `audit_logs`, `tenants`, `user_tenant_assignments` schemas
+- `webhook_events` queue table (migration `20260429000200`) with `claim_webhook_events` RPC using `SELECT FOR UPDATE SKIP LOCKED` for safe concurrent workers
+- Generic `sync_wms_stock_received` / `sync_wms_stock_shipped` RPCs (renamed from ShipHero-specific names)
+- RLS enabled on all tables; service-role bypass policy on `webhook_events`
 
 ### Auth And Access
 
-- `/login` supports email sign-in
-- Users can sign in via magic link or manual OTP code
-- `/auth/callback` exchanges the magic-link code into a session
-- Middleware protects `/dashboard`
-- Authenticated users can sign out from `/dashboard` and `/onboarding`
-- Users without tenant access are redirected to `/onboarding`
-- `/api/tenant-assignment` stores the selected tenant assignment
+- `/login` supports email magic link and OTP
+- Middleware protects `/dashboard` and `/onboarding`
+- `/api/tenant-assignment` stores tenant assignment
 
 ### Dashboard And Data Access
 
-- `/dashboard` renders for authenticated users
-- Inventory reads go through protected server-side access at `/api/inventory`
-- Seeded local inventory data displays in the dashboard
-- Dashboard now supports operator updates for on-hand quantity, safety floor percent, and flash mode
-- Dashboard now shows recent tenant-scoped audit history with field-level change summaries
-- Dashboard now includes a reconciliation snapshot that highlights at-risk inventory rows and recent sync activity for operator review
-- Dashboard now surfaces ShipHero recovery guidance plus exception-focused audit history filters for deeper operator reconciliation work
-- Dashboard now supports tenant-scoped integration management for Shopify and ShipHero
-- Landing page lead capture writes into `leads`
+- `/dashboard` renders for authenticated users with inventory, audit history, and reconciliation snapshot
+- Integration management UI for Shopify and ShipHero tenant credentials
+- Dashboard surfaces ShipHero recovery guidance and exception-focused audit history filters
+
+### Universal WMS Adapter Architecture
+
+- `WmsAdapter` interface is the single integration contract — `hmacHeader`, `verifySignature()`, `normalize()`, `getExternalAccountId()`, `getEnvSecretKey()`
+- `WmsProvider` union type (`"shopify" | "shiphero" | "fishbowl" | "netsuite"`) is the single source of truth
+- `src/services/wms-adapters/shiphero.ts` — production-ready ShipHero adapter
+- `src/services/wms-adapters/fishbowl.ts` — Fishbowl stub (registered, safe stub that returns `false` from `verifySignature` until implemented)
+- Adapter registry at `src/services/wms-adapters/index.ts`
+
+### Queue-Backed Webhook Pipeline
+
+- `src/services/webhook-queue.ts` — `enqueueWebhookEvent`, `claimNextBatch`, `markEventSucceeded`, `markEventFailed`
+- `src/app/api/queue/process/route.ts` — Vercel Cron worker protected by `CRON_SECRET`; claims batch → adapter normalize → `processSyncEventsBatch` → mark succeeded/failed per event; exponential retry delay; dead-letters after `max_attempts`
+- `src/app/api/webhooks/shiphero/route.ts` — thin: verify HMAC → enqueue → return `{ queued: true, eventId, verified: true }` in ~150 ms
+- `vercel.json` — cron config: `/api/queue/process` every minute
 
 ### Automated Coverage
 
-- Vitest route coverage now exists for dashboard APIs (`/api/inventory`, `/api/inventory/audit`, `/api/integrations`)
-- Vitest route coverage now exists for Shopify and ShipHero webhook handlers
-- Focused route validation now has a dedicated CI workflow that runs on pull requests and pushes to `main`
+- 28 Vitest unit tests across 4 test files — all passing
+  - `tests/api/inventory-routes.test.ts` (3)
+  - `tests/api/integrations-route.test.ts` (5)
+  - `tests/api/webhooks-route.test.ts` (11) — ShipHero tests now assert `enqueueWebhookEvent` is called and response is `{ queued: true }`
+  - `tests/api/webhook-queue.test.ts` (9) — worker auth, empty queue, success, retry, dead-letter, no adapter, adapter throws
+- `tests/__mocks__/server-only.ts` stub so API route test files can be imported by Vitest
+- `playwright.config.ts` and E2E test files in `tests/e2e/` ready to run against a live server
 
-### Webhook Foundation
+### Deployment Setup
 
-- Shopify and ShipHero webhook routes exist
-- Shopify route includes baseline HMAC verification
-- Shared inventory sync/service structure exists for incoming warehouse events
-- Webhook handlers can now resolve tenant-scoped integration configuration with env fallback
-- Recorded Shopify replay tooling now exists for local webhook validation
-- Shopify live-validation helper now exists to sync tenant config and print tunnel/store setup details
-- Shopify live verification helper now exists to print tracked SKU state and recent tenant-scoped audit entries after a live order
-- Cloudflare tunnel delivery has been smoke-tested successfully against the local Shopify route
-- Shopify webhook handling now skips malformed line items without `variant_id` instead of returning a 500
-- Recorded ShipHero replay tooling now exists for PO receipt and shipment validation
-- ShipHero live-validation helper scripts now exist to prepare tenant config, smoke-test the tunnel, and verify recent tenant-scoped audit results
-- ShipHero webhook handling now persists tenant integration `last_synced_at` and `last_error` state for live-delivery diagnosis
-- ShipHero live prep now succeeds against the local tenant config, and live smoke now passes through the refreshed Cloudflare tunnel
+- `vercel.json` with cron job config
+- `scripts/check-deploy-env.mjs` — validates all required env vars before deploy
+- `npm run deploy:check` — runs the pre-deploy check
+- `npm run supabase:link` — links local CLI to hosted project
+- `npm run supabase:push` — pushes pending migrations to hosted Supabase
+- `npm run test:e2e` — runs Playwright E2E suite against `http://localhost:3000`
+
+---
 
 ## What Is Not Done
 
 ### Highest Priority Gaps
 
-- ShipHero webhook flow is validated locally with recorded PO and shipment replays, but not yet against live ShipHero delivery
-- No live third-party delivery validation exists yet for ShipHero
-- No additional WMS adapters exist yet beyond ShipHero (Fishbowl, NetSuite, etc. are registered as provider types but have no adapter implementations)
+- Pending migrations not yet applied to hosted Supabase (`20260429000100` rename + `20260429000200` queue table) — run `npm run supabase:link` then `npm run supabase:push`
+- No live ShipHero delivery validated against production credentials
+- Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
 
 ### Secondary Gaps
 
-- No webhook retry/dead-letter path yet
-- No initial `webhook_events` queue foundation files exist yet for the planned ShipHero version 2 architecture
-- No browser or database-backed end-to-end suite yet
-- No production deployment plan yet
+- No Playwright E2E runs yet (infrastructure ready; requires live server)
+- No alerting or anomaly-detection channels beyond audit trail and `webhook_events` status
+- No automated reconciliation jobs for dropped/delayed webhooks
 
-## Production Readiness Gaps
+---
 
-The README describes the intended production product. The repository is closer to a validated local MVP slice. Before claiming production readiness, the codebase still needs all of the following:
+## Required Environment Variables
 
-- Real ShipHero provider delivery validated with production-issued credentials and account identifiers
-- Queue-backed asynchronous webhook processing, retry tracking, and dead-letter handling for repeated failures
-- Automated reconciliation jobs so delayed or dropped warehouse webhooks are not the only recovery path
-- Browser-level end-to-end coverage for auth, onboarding, dashboard, and operator recovery workflows
-- Deployment hardening for secrets, environment promotion, runtime monitoring, and release validation
-- Alerting, reporting, and anomaly-detection channels beyond the current dashboard and audit trail
+| Variable                        | Purpose                                                           |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Hosted Supabase project URL                                       |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key                                                 |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role key (server-side only)                      |
+| `SHOPIFY_WEBHOOK_SECRET`        | Shopify HMAC signing secret                                       |
+| `SHIPHERO_WEBHOOK_SECRET`       | ShipHero HMAC signing secret                                      |
+| `CRON_SECRET`                   | Bearer token that Vercel sends when invoking `/api/queue/process` |
 
-## Current Build Priorities
+Run `npm run deploy:check` to verify all are set before deploying.
 
-### Priority 1: Make Inventory Changes Traceable
+---
 
-**Status:** Database-side audit foundation, dashboard audit history, and exception-focused operator review flows are implemented for the local MVP.
+## Immediate Next Steps
 
-**Goal:** Use the new audit foundation to support safer integration work and later dashboard history views.
+1. **Apply migrations to hosted Supabase**
 
-Deliverables:
+   ```
+   npm run supabase:link   # enter project ref from Supabase dashboard
+   npm run supabase:push
+   ```
 
-- [x] Create `audit_logs` table
-- [x] Add DB trigger or function-based logging for inventory changes
-- [x] Expose read-only audit history in the dashboard
+2. **Deploy to Vercel** — set the six env vars above, then `vercel --prod`
 
-Why this is first:
+3. **Validate live ShipHero delivery** — rerun smoke test with a tunnel pointed at the Vercel preview URL
 
-- It reduces risk while debugging webhook behavior
-- It gives visibility into inventory mutations before real integrations are trusted
+4. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` once Fishbowl credentials are available
 
-### Priority 2: Finish Shopify Inbound Flow
+5. **Run Playwright E2E** — `npm run dev` in one terminal, `npm run test:e2e` in another
 
-**Status:** Complete for the current MVP target. Recorded payload replay succeeds locally and a real Shopify delivery has now been confirmed to mutate the mapped local inventory rows with matching audit-log entries.
-
-**Goal:** Accept a real Shopify event and push it through the local inventory path safely.
-
-Deliverables:
-
-- [x] Connect webhook payload handling to the existing inventory commit path
-- [x] Validate signature handling with recorded payload replay
-- [x] Add structured logging around webhook success/failure
-- [x] Add local replay tooling and demo integration seed support
-- [x] Add tunnel-ready live validation helper and runbook
-- [x] Fix live-delivery crash caused by Shopify line items with null `variant_id`
-- [x] Validate delivery from a live Shopify store or tunnel
-
-Definition of done:
-
-- A real or replayed Shopify webhook updates local inventory predictably
-- The resulting state can be observed in the dashboard and database
-- Live Shopify test or real-order delivery is confirmed against the mapped store variants, not only placeholder fixture IDs
-
-### Priority 3: Finish ShipHero Inbound Flow
-
-**Status:** Recorded PO and shipment payload replays now succeed locally and verify inventory plus audit-log side effects. Live ShipHero prep and tunnel smoke now succeed against the seeded tenant config. The remaining gap is a real ShipHero delivery using provider-issued credentials and account identifiers.
-
-**Implementation decision:** Keep the current synchronous ShipHero webhook path for the MVP so live provider validation can complete without adding queue infrastructure first. Defer queue-backed retries and dead-letter handling to version 2.
-
-**Current architecture note:** The version 2 queue foundation has been planned, but the initial file set for `webhook_events`, queue services, worker processing, and retry/dead-letter tests has not been created yet.
-
-**Goal:** Validate the warehouse-side sync path using the existing RPC foundation.
-
-Deliverables:
-
-- [x] Harden ShipHero webhook parsing and validation
-- [x] Map recorded payload fields to the existing sync event shape
-- [x] Validate both receiving and shipment flows against realistic local events
-- [x] Add structured success logging around ShipHero replay results
-- [x] Add failure logging and an explicit retry strategy
-- [x] Validate tunnel reachability and signed smoke delivery through the live webhook URL
-- [ ] Validate delivery from a live ShipHero source or tunnel
-
-Version 2 upgrade path:
-
-- Insert verified ShipHero webhooks into a tenant-scoped `webhook_events` or equivalent queue table before inventory mutation work
-- Return a fast `2xx` response after signature verification and persistence instead of performing full sync work in the webhook request
-- Process queued events in a worker or scheduled job that reuses the existing ShipHero normalization and inventory sync logic
-- Track queue status, attempt count, `X-Shiphero-Message-ID`, last error, and dead-letter state for repeated failures
-- Add reconciliation jobs against ShipHero API data so dropped or delayed webhooks do not become the only source of truth
-
-Definition of done:
-
-- Receiving and shipment payloads update inventory correctly without manual DB intervention
-
-### Priority 4: Make The Dashboard Useful For Operators
-
-**Status:** Core operator controls, recent audit history, reconciliation snapshot, and exception/recovery workflows are now implemented locally.
-
-**Goal:** Move from read-only proof of life to a usable operations screen.
-
-Deliverables:
-
-- [x] Manual quantity adjustment form
-- [x] Safety floor display and edit path
-- [x] Flash mode toggle
-- [x] Search/filtering for inventory items
-- [x] Recent audit history panel
-- [x] Reconciliation-focused summary/history UI
-- [x] Exception-focused reconciliation and recovery guidance UI
-
-Definition of done:
-
-- An authenticated tenant user can inspect and make controlled inventory changes from the UI
+---
 
 ## Recommended Execution Order
 
-1. Add a second WMS adapter (Fishbowl or NetSuite stub) to prove the universal adapter pattern works end-to-end for a new provider.
-2. Validate live ShipHero delivery against a tunnel or sandbox source.
-3. Add deployment and browser-level validation milestones for the production-readiness gap list.
-4. Revisit OAuth only if operator onboarding needs exceed email-based auth.
+1. Apply hosted Supabase migrations and deploy to Vercel
+2. Confirm cron worker is firing (check Vercel Cron dashboard)
+3. Validate live ShipHero delivery against a webhook-enabled sandbox or production account
+4. Complete Fishbowl adapter implementation
+5. Add Playwright E2E runs to CI alongside existing Vitest coverage
+6. Revisit OAuth only if operator onboarding needs exceed email-based auth.
 
 ## Immediate Next Task
 

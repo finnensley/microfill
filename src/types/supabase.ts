@@ -203,6 +203,144 @@ export type Database = {
         };
         Relationships: [];
       };
+      webhook_events: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          event_type: string | null;
+          external_id: string | null;
+          id: string;
+          integration_id: string | null;
+          last_error: string | null;
+          max_attempts: number;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          provider_message_id: string | null;
+          status: string;
+          tenant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          event_type?: string | null;
+          external_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          last_error?: string | null;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          payload: Json;
+          provider: string;
+          provider_message_id?: string | null;
+          status?: string;
+          tenant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          event_type?: string | null;
+          external_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          last_error?: string | null;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          payload?: Json;
+          provider?: string;
+          provider_message_id?: string | null;
+          status?: string;
+          tenant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "webhook_events_tenant_id_fkey";
+            columns: ["tenant_id"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "webhook_events_integration_id_fkey";
+            columns: ["integration_id"];
+            isOneToOne: false;
+            referencedRelation: "integrations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      webhook_events: {
+        Row: {
+          attempts: number;
+          created_at: string;
+          event_type: string | null;
+          external_id: string | null;
+          id: string;
+          integration_id: string | null;
+          last_error: string | null;
+          max_attempts: number;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          provider_message_id: string | null;
+          status: string;
+          tenant_id: string;
+          updated_at: string;
+        };
+        Insert: {
+          attempts?: number;
+          created_at?: string;
+          event_type?: string | null;
+          external_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          last_error?: string | null;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          payload: Json;
+          provider: string;
+          provider_message_id?: string | null;
+          status?: string;
+          tenant_id: string;
+          updated_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          created_at?: string;
+          event_type?: string | null;
+          external_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          last_error?: string | null;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          payload?: Json;
+          provider?: string;
+          provider_message_id?: string | null;
+          status?: string;
+          tenant_id?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "webhook_events_tenant_id_fkey";
+            columns: ["tenant_id"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "webhook_events_integration_id_fkey";
+            columns: ["integration_id"];
+            isOneToOne: false;
+            referencedRelation: "integrations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       user_tenant_assignments: {
         Row: {
           created_at: string;
@@ -271,6 +409,10 @@ export type Database = {
           tenant_id_input: string;
         };
         Returns: undefined;
+      };
+      claim_webhook_events: {
+        Args: { batch_size: number };
+        Returns: Database["public"]["Tables"]["webhook_events"]["Row"][];
       };
     };
     Enums: {
