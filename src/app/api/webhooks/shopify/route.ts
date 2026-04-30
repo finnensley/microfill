@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { createServerSupabaseClient } from "@/lib/supabase-server";
-import { getShopifyWebhookSecret } from "@/lib/supabase-config";
 import { resolveIntegration } from "@/services/integrations";
 
 type ShopifyWebhookLineItem = {
@@ -78,16 +77,31 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const integration = await resolveIntegration({
-      provider: "shopify",
-      tenantId: tenantHeader,
-      externalAccountId: shopId,
-      externalShopDomain: shopDomain,
-    });
+    let integration = null;
+    try {
+      integration = await resolveIntegration({
+        provider: "shopify",
+        tenantId: tenantHeader,
+        externalAccountId: shopId,
+        externalShopDomain: shopDomain,
+      });
+    } catch (err) {
+      console.warn(
+        "Shopify integration lookup failed, proceeding with env fallback",
+        err,
+      );
+    }
 
     const resolvedTenantId = integration?.tenant_id ?? tenantHeader ?? shopId;
     const shopifyWebhookSecret =
-      integration?.webhook_secret ?? getShopifyWebhookSecret();
+      integration?.webhook_secret ??
+      process.env["SHOPIFY_WEBHOOK_SECRET"] ??
+      null;
+
+    if (!shopifyWebhookSecret) {
+      console.error("No webhook secret available to verify Shopify signature");
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const persistIntegrationStatus = async (lastError: string | null) => {
       if (!integration?.id) {
         return;

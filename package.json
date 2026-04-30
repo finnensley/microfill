@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:e2e": "npx playwright test --config=playwright.config.ts",
+    "test:e2e:prod": "PLAYWRIGHT_BASE_URL=https://microfill.vercel.app npx playwright test --config=playwright.config.ts",
     "test:routes": "vitest run tests/api/inventory-routes.test.ts tests/api/integrations-route.test.ts tests/api/webhooks-route.test.ts",
     "supabase:start": "npx supabase start",
     "supabase:stop": "npx supabase stop",

@@ -30,6 +30,26 @@ type IntegrationDraftState = {
   webhookSecret: string;
 };
 
+type QueueStatus = {
+  counts: {
+    dead_letter: number;
+    failed: number;
+    pending: number;
+    processing: number;
+    succeeded: number;
+  };
+  recentFailed: Array<{
+    attempts: number;
+    event_type: string;
+    id: string;
+    last_error: string | null;
+    max_attempts: number;
+    provider: string;
+    updated_at: string;
+  }>;
+  total: number;
+};
+
 type ShipHeroWebhookStatus = {
   failed: number;
   failureKind: string | null;
@@ -214,6 +234,9 @@ export default function InventoryDashboard({
   const [integrationStatusTone, setIntegrationStatusTone] = useState<
     "error" | "success" | null
   >(null);
+  const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState<string | null>(null);
 
   useEffect(() => {
     setDrafts((currentDrafts) => {
@@ -288,6 +311,45 @@ export default function InventoryDashboard({
   useEffect(() => {
     void refreshIntegrations();
   }, [refreshIntegrations]);
+
+  const refreshQueueStatus = useCallback(async () => {
+    if (!tenantId) {
+      setQueueStatus(null);
+      setQueueLoading(false);
+      return;
+    }
+
+    try {
+      setQueueLoading(true);
+      const response = await fetch("/api/queue/status");
+      const responseText = await response.text();
+      const payload = (responseText ? JSON.parse(responseText) : {}) as
+        | QueueStatus
+        | { error?: string };
+
+      if (!response.ok) {
+        throw new Error(
+          ("error" in payload && payload.error) ||
+            "Unable to load queue status.",
+        );
+      }
+
+      setQueueStatus(payload as QueueStatus);
+      setQueueError(null);
+    } catch (fetchError) {
+      setQueueError(
+        fetchError instanceof Error
+          ? fetchError.message
+          : "Unknown error loading queue status.",
+      );
+    } finally {
+      setQueueLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
+    void refreshQueueStatus();
+  }, [refreshQueueStatus]);
 
   const refreshAuditHistory = useCallback(async () => {
     if (!tenantId) {
@@ -1285,6 +1347,102 @@ export default function InventoryDashboard({
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-semibold text-slate-900">Queue health</p>
+            <p className="text-sm text-slate-600">
+              Webhook event processing status across all pipeline stages for
+              this tenant.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void refreshQueueStatus()}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
+          >
+            Refresh
+          </button>
+        </div>
+
+        {queueLoading ? (
+          <p className="mt-4 text-sm text-slate-600">Loading queue status...</p>
+        ) : null}
+
+        {queueError ? (
+          <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+            {queueError}
+          </div>
+        ) : null}
+
+        {!queueLoading && !queueError && queueStatus ? (
+          <>
+            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+              {(
+                [
+                  ["Pending", "pending", "text-blue-600"],
+                  ["Processing", "processing", "text-amber-600"],
+                  ["Succeeded", "succeeded", "text-emerald-600"],
+                  ["Failed", "failed", "text-rose-600"],
+                  ["Dead Letter", "dead_letter", "text-rose-900"],
+                ] as const
+              ).map(([label, key, colorClass]) => (
+                <div
+                  key={key}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                    {label}
+                  </p>
+                  <p className={`mt-2 text-2xl font-semibold ${colorClass}`}>
+                    {queueStatus.counts[key]}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {queueStatus.recentFailed.length > 0 ? (
+              <div className="mt-4">
+                <p className="text-sm font-semibold text-slate-900">
+                  Recent failures
+                </p>
+                <div className="mt-3 grid gap-2">
+                  {queueStatus.recentFailed.map((event) => (
+                    <div
+                      key={event.id}
+                      className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3"
+                    >
+                      <div className="flex flex-col gap-1 md:flex-row md:items-start md:justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {event.provider} / {event.event_type}
+                          </p>
+                          {event.last_error ? (
+                            <p className="mt-1 text-sm text-rose-800">
+                              {event.last_error}
+                            </p>
+                          ) : null}
+                        </div>
+                        <div className="shrink-0 text-right text-xs text-slate-500">
+                          <p>
+                            Attempt {event.attempts} of {event.max_attempts}
+                          </p>
+                          <p>{new Date(event.updated_at).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-slate-600">
+                No failed webhook events in the queue.
+              </p>
+            )}
+          </>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
