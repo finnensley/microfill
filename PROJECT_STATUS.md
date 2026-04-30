@@ -112,8 +112,8 @@ MicroFill now has a complete queue-backed webhook pipeline with crash resilience
 ### Secondary Gaps
 
 - No alerting or anomaly-detection channels beyond audit trail and `webhook_events` status
-- No automated reconciliation jobs for dropped/delayed webhooks
 - Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
+- Outbound Shopify sync requires `shopifyLocationId` and a valid `api_key` (access token with `write_inventory` scope) set on the tenant's Shopify integration
 
 ---
 
@@ -134,40 +134,11 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 ## Immediate Next Steps
 
-1. **Apply migrations to hosted Supabase**
+1. **Validate live ShipHero delivery** — run `scripts/smoke-test-shiphero-live-webhook.mjs` against the Vercel production URL with a real ShipHero sandbox or webhook replay
+2. **Configure Shopify outbound sync** — set `shopifyLocationId` + `apiKey` (access token with `write_inventory`) on the tenant's Shopify integration via the dashboard, then click **Sync inventory to Shopify** to verify
+3. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts` once Fishbowl credentials are available
+4. **Add alerting** — wire `webhook_events` dead-letter count into a Slack/email alert or Vercel log drain
 
-   ```
-   npm run supabase:link   # enter project ref from Supabase dashboard
-   npm run supabase:push
-   ```
-
-2. **Deploy to Vercel** — set the six env vars above, then `vercel --prod`
-
-3. **Validate live ShipHero delivery** — rerun smoke test with a tunnel pointed at the Vercel preview URL
-
-4. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` once Fishbowl credentials are available
-
-5. **Run Playwright E2E** — `npm run dev` in one terminal, `npm run test:e2e` in another
-
----
-
-## Recommended Execution Order
-
-1. Apply hosted Supabase migrations and deploy to Vercel
-2. Confirm cron worker is firing (check Vercel Cron dashboard)
-3. Validate live ShipHero delivery against a webhook-enabled sandbox or production account
-4. Complete Fishbowl adapter implementation
-5. Add Playwright E2E runs to CI alongside existing Vitest coverage
-6. Revisit OAuth only if operator onboarding needs exceed email-based auth.
-
-## Immediate Next Task
-
-**Best next task:** validate live ShipHero delivery or add a second WMS adapter.
-
-Why:
-
-- The universal adapter architecture is now in place. Adding a new WMS (Fishbowl, NetSuite, Deposco, etc.) only requires: a type definition file, an adapter file implementing `WmsAdapter`, registration in the adapter registry, and a new webhook route. No changes to shared infrastructure are needed.
-- The ShipHero route is now thin and adapter-driven. All 20 Vitest tests pass.
 - The remaining gap is either live ShipHero delivery (requires provider credentials) or a second adapter implementation to prove the pattern works for a different WMS.
 
 Resume checklist:
