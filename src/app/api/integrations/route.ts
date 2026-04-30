@@ -19,6 +19,7 @@ type IntegrationUpdateBody = {
   externalAccountId?: string;
   externalShopDomain?: string;
   provider?: ManagedIntegrationProvider;
+  shopifyLocationId?: string;
   status?: IntegrationStatus;
   webhookSecret?: string;
 };
@@ -175,7 +176,7 @@ export async function PATCH(req: Request) {
   const supabase = createServerSupabaseClient();
   const { data: existingIntegration, error: lookupError } = await supabase
     .from("integrations")
-    .select("id")
+    .select("id, config")
     .eq("tenant_id", tenantResult.tenantId)
     .eq("provider", provider)
     .maybeSingle();
@@ -184,9 +185,20 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: lookupError.message }, { status: 500 });
   }
 
+  // Merge provider-specific config fields into the existing config JSONB
+  const existingConfig =
+    (existingIntegration?.config as Record<string, unknown> | null) ?? {};
+  const mergedConfig: Record<string, unknown> = { ...existingConfig };
+
+  if (provider === "shopify" && body.shopifyLocationId !== undefined) {
+    const locationId = body.shopifyLocationId?.trim();
+    mergedConfig.shopifyLocationId = locationId || null;
+  }
+
   const payload = {
     api_key: normalizeOptionalText(body.apiKey),
     api_secret: normalizeOptionalText(body.apiSecret),
+    config: mergedConfig,
     display_name: normalizeOptionalText(body.displayName),
     external_account_id: normalizedExternalAccountId,
     external_shop_domain: provider === "shopify" ? normalizedShopDomain : null,

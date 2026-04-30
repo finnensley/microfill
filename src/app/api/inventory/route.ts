@@ -41,18 +41,39 @@ export async function GET(req: Request) {
     );
   }
 
+  const page = Math.max(
+    1,
+    parseInt(requestUrl.searchParams.get("page") ?? "1", 10) || 1,
+  );
+  const pageSize = Math.min(
+    100,
+    Math.max(
+      1,
+      parseInt(requestUrl.searchParams.get("pageSize") ?? "25", 10) || 25,
+    ),
+  );
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
   const supabase = createServerSupabaseClient();
-  const { data, error } = await supabase
+  const { data, error, count } = await supabase
     .from("inventory_items")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("tenant_id", resolvedTenantId)
-    .order("updated_at", { ascending: false });
+    .order("updated_at", { ascending: false })
+    .range(from, to);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ items: data ?? [], tenantId: resolvedTenantId });
+  return NextResponse.json({
+    items: data ?? [],
+    page,
+    pageSize,
+    tenantId: resolvedTenantId,
+    total: count ?? 0,
+  });
 }
 
 export async function PATCH(req: Request) {

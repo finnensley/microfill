@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServerSupabaseClient } from "@/lib/supabase-server";
+import { pushInventoryToShopify } from "@/services/shopify-sync";
 import type { WmsProvider } from "@/services/wms-adapters/types";
 
 /**
@@ -66,6 +67,20 @@ export async function processSyncEvent(
       console.log(
         `✓ [${event.source}] Stock received: ${event.sku} +${event.quantity} (${event.externalId})`,
       );
+
+      // Best-effort outbound push to Shopify — never fails the inbound sync
+      try {
+        await pushInventoryToShopify({
+          tenantId: event.tenantId,
+          sku: event.sku,
+        });
+      } catch (shopifyErr) {
+        console.warn(
+          `[${event.source}] Shopify outbound push failed (non-fatal) for SKU ${event.sku}:`,
+          shopifyErr,
+        );
+      }
+
       return true;
     }
 

@@ -1,69 +1,94 @@
 import { useCallback, useEffect, useState } from "react";
 import { InventoryItem } from "@/types/inventory";
 
+const DEFAULT_PAGE_SIZE = 10;
+
 /**
- * Hook to fetch and subscribe to inventory items
- * Supports optional tenant_id filtering for multi-tenant setups
- * TODO: Extract tenant_id from auth context automatically
+ * Hook to fetch and subscribe to inventory items with server-side pagination.
  */
 export function useInventory(tenantId?: string) {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = DEFAULT_PAGE_SIZE;
 
-  // 1. Initial Fetch
-  const fetchInventory = useCallback(async () => {
-    if (!tenantId) {
-      setItems([]);
-      setError(
-        "No tenant is configured for this account yet. Complete onboarding or assign app_metadata.tenant_id for the user.",
-      );
-      setLoading(false);
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await fetch(
-        `/api/inventory?tenantId=${encodeURIComponent(tenantId)}`,
-      );
-      const responseText = await response.text();
-      const payload = (responseText ? JSON.parse(responseText) : {}) as {
-        error?: string;
-        items?: InventoryItem[];
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Unable to load inventory");
+  const fetchInventory = useCallback(
+    async (targetPage: number = 1) => {
+      if (!tenantId) {
+        setItems([]);
+        setTotal(0);
+        setError(
+          "No tenant is configured for this account yet. Complete onboarding or assign app_metadata.tenant_id for the user.",
+        );
+        setLoading(false);
+        return;
       }
 
-      setItems(payload.items || []);
-      setError(null);
-    } catch (err) {
-      console.error("Error fetching inventory:", err);
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId]);
+      try {
+        setLoading(true);
+        const url = new URL("/api/inventory", window.location.origin);
+        url.searchParams.set("tenantId", tenantId);
+        url.searchParams.set("page", String(targetPage));
+        url.searchParams.set("pageSize", String(pageSize));
 
-  // 2. Real-time Subscription
+        const response = await fetch(url.toString());
+        const responseText = await response.text();
+        const payload = (responseText ? JSON.parse(responseText) : {}) as {
+          error?: string;
+          items?: InventoryItem[];
+          total?: number;
+          page?: number;
+        };
+
+        if (!response.ok) {
+          throw new Error(payload.error || "Unable to load inventory");
+        }
+
+        setItems(payload.items ?? []);
+        setTotal(payload.total ?? 0);
+        setPage(payload.page ?? targetPage);
+        setError(null);
+      } catch (err) {
+        console.error("Error fetching inventory:", err);
+        setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [tenantId, pageSize],
+  );
+
   useEffect(() => {
-    fetchInventory();
-
-    // TODO: Re-enable real-time subscriptions with updated Supabase API
-    // For now, refresh on mount. In production, use:
-    // const channel = supabase.channel('inventory-updates')
-    //   .on('postgres_changes', { event: '*', table: 'inventory_items' }, () => {
-    //     fetchInventory();
-    //   })
-    //   .subscribe();
-    // return () => { supabase.removeChannel(channel); }
-
-    return () => {
-      // Cleanup
-    };
+    void fetchInventory(1);
   }, [fetchInventory]);
 
-  return { items, loading, error, refresh: fetchInventory };
+  const goToPage = useCallback(
+    (nextPage: number) => {
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      const clamped = Math.min(Math.max(1, nextPage), totalPages);
+      setPage(clamped);
+      void fetchInventory(clamped);
+    },
+    [fetchInventory, total, pageSize],
+  );
+
+  const refresh = useCallback(() => {
+    void fetchInventory(page);
+  }, [fetchInventory, page]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  return {
+    items,
+    loading,
+    error,
+    page,
+    pageSize,
+    total,
+    totalPages,
+    goToPage,
+    refresh,
+  };
 }

@@ -4,399 +4,405 @@ export type Json =
   | boolean
   | null
   | { [key: string]: Json | undefined }
-  | Json[]
+  | Json[];
 
 export type Database = {
   public: {
     Tables: {
       audit_logs: {
         Row: {
-          action: string
-          actor_role: string | null
-          actor_user_id: string | null
-          changed_columns: string[] | null
-          created_at: string
-          id: string
-          inventory_item_id: string | null
-          new_values: Json | null
-          old_values: Json | null
-          source: string
-          tenant_id: string | null
-        }
+          action: string;
+          actor_role: string | null;
+          actor_user_id: string | null;
+          changed_columns: string[] | null;
+          created_at: string;
+          id: string;
+          inventory_item_id: string | null;
+          new_values: Json | null;
+          old_values: Json | null;
+          source: string;
+          tenant_id: string | null;
+        };
         Insert: {
-          action: string
-          actor_role?: string | null
-          actor_user_id?: string | null
-          changed_columns?: string[] | null
-          created_at?: string
-          id?: string
-          inventory_item_id?: string | null
-          new_values?: Json | null
-          old_values?: Json | null
-          source?: string
-          tenant_id?: string | null
-        }
+          action: string;
+          actor_role?: string | null;
+          actor_user_id?: string | null;
+          changed_columns?: string[] | null;
+          created_at?: string;
+          id?: string;
+          inventory_item_id?: string | null;
+          new_values?: Json | null;
+          old_values?: Json | null;
+          source?: string;
+          tenant_id?: string | null;
+        };
         Update: {
-          action?: string
-          actor_role?: string | null
-          actor_user_id?: string | null
-          changed_columns?: string[] | null
-          created_at?: string
-          id?: string
-          inventory_item_id?: string | null
-          new_values?: Json | null
-          old_values?: Json | null
-          source?: string
-          tenant_id?: string | null
-        }
-        Relationships: []
-      }
+          action?: string;
+          actor_role?: string | null;
+          actor_user_id?: string | null;
+          changed_columns?: string[] | null;
+          created_at?: string;
+          id?: string;
+          inventory_item_id?: string | null;
+          new_values?: Json | null;
+          old_values?: Json | null;
+          source?: string;
+          tenant_id?: string | null;
+        };
+        Relationships: [];
+      };
       integrations: {
         Row: {
-          api_key: string | null
-          api_secret: string | null
-          config: Json
-          created_at: string
-          display_name: string | null
-          external_account_id: string | null
-          external_shop_domain: string | null
-          id: string
-          last_error: string | null
-          last_synced_at: string | null
-          provider: string
-          status: string
-          tenant_id: string
-          updated_at: string
-          webhook_secret: string | null
-        }
+          api_key: string | null;
+          api_secret: string | null;
+          config: Json;
+          created_at: string;
+          display_name: string | null;
+          external_account_id: string | null;
+          external_shop_domain: string | null;
+          id: string;
+          last_error: string | null;
+          last_synced_at: string | null;
+          provider: string;
+          status: string;
+          tenant_id: string;
+          updated_at: string;
+          webhook_secret: string | null;
+        };
         Insert: {
-          api_key?: string | null
-          api_secret?: string | null
-          config?: Json
-          created_at?: string
-          display_name?: string | null
-          external_account_id?: string | null
-          external_shop_domain?: string | null
-          id?: string
-          last_error?: string | null
-          last_synced_at?: string | null
-          provider: string
-          status?: string
-          tenant_id: string
-          updated_at?: string
-          webhook_secret?: string | null
-        }
+          api_key?: string | null;
+          api_secret?: string | null;
+          config?: Json;
+          created_at?: string;
+          display_name?: string | null;
+          external_account_id?: string | null;
+          external_shop_domain?: string | null;
+          id?: string;
+          last_error?: string | null;
+          last_synced_at?: string | null;
+          provider: string;
+          status?: string;
+          tenant_id: string;
+          updated_at?: string;
+          webhook_secret?: string | null;
+        };
         Update: {
-          api_key?: string | null
-          api_secret?: string | null
-          config?: Json
-          created_at?: string
-          display_name?: string | null
-          external_account_id?: string | null
-          external_shop_domain?: string | null
-          id?: string
-          last_error?: string | null
-          last_synced_at?: string | null
-          provider?: string
-          status?: string
-          tenant_id?: string
-          updated_at?: string
-          webhook_secret?: string | null
-        }
+          api_key?: string | null;
+          api_secret?: string | null;
+          config?: Json;
+          created_at?: string;
+          display_name?: string | null;
+          external_account_id?: string | null;
+          external_shop_domain?: string | null;
+          id?: string;
+          last_error?: string | null;
+          last_synced_at?: string | null;
+          provider?: string;
+          status?: string;
+          tenant_id?: string;
+          updated_at?: string;
+          webhook_secret?: string | null;
+        };
         Relationships: [
           {
-            foreignKeyName: "integrations_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
+            foreignKeyName: "integrations_tenant_id_fkey";
+            columns: ["tenant_id"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       inventory_items: {
         Row: {
-          committed_quantity: number
-          created_at: string | null
-          flash_mode_enabled: boolean | null
-          id: string
-          last_synced_at: string | null
-          safety_floor_percent: number
-          safety_floor_quantity: number
-          shopify_product_id: string
-          shopify_variant_id: string
-          sku: string | null
-          tenant_id: string
-          total_quantity: number
-          updated_at: string | null
-        }
+          committed_quantity: number;
+          created_at: string | null;
+          flash_mode_enabled: boolean | null;
+          id: string;
+          last_synced_at: string | null;
+          safety_floor_percent: number;
+          safety_floor_quantity: number;
+          shopify_inventory_item_id: string | null;
+          shopify_product_id: string;
+          shopify_variant_id: string;
+          sku: string | null;
+          tenant_id: string;
+          total_quantity: number;
+          updated_at: string | null;
+        };
         Insert: {
-          committed_quantity?: number
-          created_at?: string | null
-          flash_mode_enabled?: boolean | null
-          id?: string
-          last_synced_at?: string | null
-          safety_floor_percent?: number
-          safety_floor_quantity?: number
-          shopify_product_id: string
-          shopify_variant_id: string
-          sku?: string | null
-          tenant_id?: string
-          total_quantity?: number
-          updated_at?: string | null
-        }
+          committed_quantity?: number;
+          created_at?: string | null;
+          flash_mode_enabled?: boolean | null;
+          id?: string;
+          last_synced_at?: string | null;
+          safety_floor_percent?: number;
+          safety_floor_quantity?: number;
+          shopify_inventory_item_id?: string | null;
+          shopify_product_id: string;
+          shopify_variant_id: string;
+          sku?: string | null;
+          tenant_id?: string;
+          total_quantity?: number;
+          updated_at?: string | null;
+        };
         Update: {
-          committed_quantity?: number
-          created_at?: string | null
-          flash_mode_enabled?: boolean | null
-          id?: string
-          last_synced_at?: string | null
-          safety_floor_percent?: number
-          safety_floor_quantity?: number
-          shopify_product_id?: string
-          shopify_variant_id?: string
-          sku?: string | null
-          tenant_id?: string
-          total_quantity?: number
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
+          committed_quantity?: number;
+          created_at?: string | null;
+          flash_mode_enabled?: boolean | null;
+          id?: string;
+          last_synced_at?: string | null;
+          safety_floor_percent?: number;
+          safety_floor_quantity?: number;
+          shopify_inventory_item_id?: string | null;
+          shopify_product_id?: string;
+          shopify_variant_id?: string;
+          sku?: string | null;
+          tenant_id?: string;
+          total_quantity?: number;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
       leads: {
         Row: {
-          created_at: string
-          email: string
-          id: string
-        }
+          created_at: string;
+          email: string;
+          id: string;
+        };
         Insert: {
-          created_at?: string
-          email: string
-          id?: string
-        }
+          created_at?: string;
+          email: string;
+          id?: string;
+        };
         Update: {
-          created_at?: string
-          email?: string
-          id?: string
-        }
-        Relationships: []
-      }
+          created_at?: string;
+          email?: string;
+          id?: string;
+        };
+        Relationships: [];
+      };
       tenants: {
         Row: {
-          created_at: string
-          id: string
-          name: string
-          slug: string | null
-          updated_at: string
-        }
+          created_at: string;
+          id: string;
+          name: string;
+          slug: string | null;
+          updated_at: string;
+        };
         Insert: {
-          created_at?: string
-          id: string
-          name: string
-          slug?: string | null
-          updated_at?: string
-        }
+          created_at?: string;
+          id: string;
+          name: string;
+          slug?: string | null;
+          updated_at?: string;
+        };
         Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          slug?: string | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
+          created_at?: string;
+          id?: string;
+          name?: string;
+          slug?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       user_tenant_assignments: {
         Row: {
-          created_at: string
-          email: string | null
-          tenant_id: string
-          updated_at: string
-          user_id: string
-        }
+          created_at: string;
+          email: string | null;
+          tenant_id: string;
+          updated_at: string;
+          user_id: string;
+        };
         Insert: {
-          created_at?: string
-          email?: string | null
-          tenant_id: string
-          updated_at?: string
-          user_id: string
-        }
+          created_at?: string;
+          email?: string | null;
+          tenant_id: string;
+          updated_at?: string;
+          user_id: string;
+        };
         Update: {
-          created_at?: string
-          email?: string | null
-          tenant_id?: string
-          updated_at?: string
-          user_id?: string
-        }
+          created_at?: string;
+          email?: string | null;
+          tenant_id?: string;
+          updated_at?: string;
+          user_id?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "user_tenant_assignments_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
+            foreignKeyName: "user_tenant_assignments_tenant_id_fkey";
+            columns: ["tenant_id"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["id"];
           },
-        ]
-      }
+        ];
+      };
       webhook_events: {
         Row: {
-          attempts: number
-          created_at: string
-          event_type: string | null
-          external_id: string | null
-          id: string
-          integration_id: string | null
-          last_error: string | null
-          max_attempts: number
-          next_attempt_at: string
-          payload: Json
-          provider: string
-          provider_message_id: string | null
-          status: string
-          tenant_id: string
-          updated_at: string
-        }
+          attempts: number;
+          created_at: string;
+          event_type: string | null;
+          external_id: string | null;
+          id: string;
+          integration_id: string | null;
+          last_error: string | null;
+          max_attempts: number;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          provider_message_id: string | null;
+          status: string;
+          tenant_id: string;
+          updated_at: string;
+        };
         Insert: {
-          attempts?: number
-          created_at?: string
-          event_type?: string | null
-          external_id?: string | null
-          id?: string
-          integration_id?: string | null
-          last_error?: string | null
-          max_attempts?: number
-          next_attempt_at?: string
-          payload: Json
-          provider: string
-          provider_message_id?: string | null
-          status?: string
-          tenant_id: string
-          updated_at?: string
-        }
+          attempts?: number;
+          created_at?: string;
+          event_type?: string | null;
+          external_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          last_error?: string | null;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          payload: Json;
+          provider: string;
+          provider_message_id?: string | null;
+          status?: string;
+          tenant_id: string;
+          updated_at?: string;
+        };
         Update: {
-          attempts?: number
-          created_at?: string
-          event_type?: string | null
-          external_id?: string | null
-          id?: string
-          integration_id?: string | null
-          last_error?: string | null
-          max_attempts?: number
-          next_attempt_at?: string
-          payload?: Json
-          provider?: string
-          provider_message_id?: string | null
-          status?: string
-          tenant_id?: string
-          updated_at?: string
-        }
+          attempts?: number;
+          created_at?: string;
+          event_type?: string | null;
+          external_id?: string | null;
+          id?: string;
+          integration_id?: string | null;
+          last_error?: string | null;
+          max_attempts?: number;
+          next_attempt_at?: string;
+          payload?: Json;
+          provider?: string;
+          provider_message_id?: string | null;
+          status?: string;
+          tenant_id?: string;
+          updated_at?: string;
+        };
         Relationships: [
           {
-            foreignKeyName: "webhook_events_integration_id_fkey"
-            columns: ["integration_id"]
-            isOneToOne: false
-            referencedRelation: "integrations"
-            referencedColumns: ["id"]
+            foreignKeyName: "webhook_events_integration_id_fkey";
+            columns: ["integration_id"];
+            isOneToOne: false;
+            referencedRelation: "integrations";
+            referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "webhook_events_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "tenants"
-            referencedColumns: ["id"]
+            foreignKeyName: "webhook_events_tenant_id_fkey";
+            columns: ["tenant_id"];
+            isOneToOne: false;
+            referencedRelation: "tenants";
+            referencedColumns: ["id"];
           },
-        ]
-      }
-    }
+        ];
+      };
+    };
     Views: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     Functions: {
       claim_webhook_events: {
-        Args: { batch_size: number }
+        Args: { batch_size: number };
         Returns: {
-          attempts: number
-          created_at: string
-          event_type: string | null
-          external_id: string | null
-          id: string
-          integration_id: string | null
-          last_error: string | null
-          max_attempts: number
-          next_attempt_at: string
-          payload: Json
-          provider: string
-          provider_message_id: string | null
-          status: string
-          tenant_id: string
-          updated_at: string
-        }[]
+          attempts: number;
+          created_at: string;
+          event_type: string | null;
+          external_id: string | null;
+          id: string;
+          integration_id: string | null;
+          last_error: string | null;
+          max_attempts: number;
+          next_attempt_at: string;
+          payload: Json;
+          provider: string;
+          provider_message_id: string | null;
+          status: string;
+          tenant_id: string;
+          updated_at: string;
+        }[];
         SetofOptions: {
-          from: "*"
-          to: "webhook_events"
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
+          from: "*";
+          to: "webhook_events";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       get_available_quantity:
         | { Args: { item_id: string }; Returns: number }
         | {
-            Args: { item_id: string; tenant_id_input: string }
-            Returns: number
-          }
+            Args: { item_id: string; tenant_id_input: string };
+            Returns: number;
+          };
       get_changed_inventory_columns: {
-        Args: { new_row: Json; old_row: Json }
-        Returns: string[]
-      }
+        Args: { new_row: Json; old_row: Json };
+        Returns: string[];
+      };
       increment_committed_quantity:
         | { Args: { amount: number; item_id: string }; Returns: number }
         | {
-            Args: { amount: number; item_id: string; tenant_id_input: string }
-            Returns: number
-          }
+            Args: { amount: number; item_id: string; tenant_id_input: string };
+            Returns: number;
+          };
       sync_wms_stock_received: {
         Args: {
-          qty_received: number
-          sku_input: string
-          tenant_id_input: string
-        }
-        Returns: undefined
-      }
+          qty_received: number;
+          sku_input: string;
+          tenant_id_input: string;
+        };
+        Returns: undefined;
+      };
       sync_wms_stock_shipped: {
         Args: {
-          qty_shipped: number
-          sku_input: string
-          tenant_id_input: string
-        }
-        Returns: undefined
-      }
-    }
+          qty_shipped: number;
+          sku_input: string;
+          tenant_id_input: string;
+        };
+        Returns: undefined;
+      };
+    };
     Enums: {
-      [_ in never]: never
-    }
+      [_ in never]: never;
+    };
     CompositeTypes: {
-      [_ in never]: never
-    }
-  }
-}
+      [_ in never]: never;
+    };
+  };
+};
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<
+  keyof Database,
+  "public"
+>];
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
+      Row: infer R;
     }
     ? R
     : never
@@ -404,99 +410,98 @@ export type Tables<
         DefaultSchema["Views"])
     ? (DefaultSchema["Tables"] &
         DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
+        Row: infer R;
       }
       ? R
       : never
-    : never
+    : never;
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
+      Insert: infer I;
     }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
+        Insert: infer I;
       }
       ? I
       : never
-    : never
+    : never;
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
+      Update: infer U;
     }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
+        Update: infer U;
       }
       ? U
       : never
-    : never
+    : never;
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
+    : never;
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
+    schema: keyof DatabaseWithoutInternals;
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
+  schema: keyof DatabaseWithoutInternals;
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
+    : never;
 
 export const Constants = {
   public: {
     Enums: {},
   },
-} as const
-
+} as const;

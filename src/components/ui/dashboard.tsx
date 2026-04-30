@@ -26,6 +26,7 @@ type IntegrationDraftState = {
   displayName: string;
   externalAccountId: string;
   externalShopDomain: string;
+  shopifyLocationId: string;
   status: "draft" | "active" | "disabled" | "error";
   webhookSecret: string;
 };
@@ -68,12 +69,17 @@ type ShipHeroWebhookStatus = {
 function createIntegrationDraft(
   integration?: ManagedIntegrationRecord,
 ): IntegrationDraftState {
+  const config = (integration?.config as Record<string, unknown> | null) ?? {};
   return {
     apiKey: integration?.api_key ?? "",
     apiSecret: integration?.api_secret ?? "",
     displayName: integration?.display_name ?? "",
     externalAccountId: integration?.external_account_id ?? "",
     externalShopDomain: integration?.external_shop_domain ?? "",
+    shopifyLocationId:
+      typeof config.shopifyLocationId === "string"
+        ? config.shopifyLocationId
+        : "",
     status:
       integration?.status === "active" ||
       integration?.status === "disabled" ||
@@ -200,9 +206,8 @@ function getShipHeroWebhookStatus(
 export default function InventoryDashboard({
   tenantId,
 }: InventoryDashboardProps) {
-  const { items, loading, error, refresh } = useInventory(
-    tenantId || undefined,
-  );
+  const { items, loading, error, refresh, page, totalPages, total, goToPage } =
+    useInventory(tenantId || undefined);
   const [searchTerm, setSearchTerm] = useState("");
   const [drafts, setDrafts] = useState<Record<string, DraftItemState>>({});
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
@@ -237,6 +242,12 @@ export default function InventoryDashboard({
   const [queueStatus, setQueueStatus] = useState<QueueStatus | null>(null);
   const [queueLoading, setQueueLoading] = useState(true);
   const [queueError, setQueueError] = useState<string | null>(null);
+  const [shopifySyncing, setShopifySyncing] = useState(false);
+  const [shopifySyncResult, setShopifySyncResult] = useState<{
+    synced: number;
+    skipped: number;
+    errors: number;
+  } | null>(null);
 
   useEffect(() => {
     setDrafts((currentDrafts) => {
@@ -685,6 +696,8 @@ export default function InventoryDashboard({
           externalAccountId: draft.externalAccountId,
           externalShopDomain: draft.externalShopDomain,
           provider,
+          shopifyLocationId:
+            provider === "shopify" ? draft.shopifyLocationId : undefined,
           status: draft.status,
           webhookSecret: draft.webhookSecret,
         }),
@@ -721,6 +734,38 @@ export default function InventoryDashboard({
       );
     } finally {
       setSavingIntegrationProvider(null);
+    }
+  }
+
+  async function runShopifySync() {
+    setShopifySyncing(true);
+    setShopifySyncResult(null);
+
+    try {
+      const response = await fetch("/api/inventory/shopify-sync", {
+        method: "POST",
+      });
+      const payload = (await response.json()) as {
+        synced?: number;
+        skipped?: number;
+        errors?: number;
+        error?: string;
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Shopify sync failed.");
+      }
+
+      setShopifySyncResult({
+        synced: payload.synced ?? 0,
+        skipped: payload.skipped ?? 0,
+        errors: payload.errors ?? 0,
+      });
+    } catch (err) {
+      setShopifySyncResult({ synced: 0, skipped: 0, errors: 1 });
+      console.error("Shopify sync error:", err);
+    } finally {
+      setShopifySyncing(false);
     }
   }
 
@@ -1082,6 +1127,28 @@ export default function InventoryDashboard({
                         />
                       </label>
 
+                      {provider === "shopify" ? (
+                        <label className="flex flex-col gap-1 text-sm text-slate-700">
+                          Inventory location ID
+                          <input
+                            value={draft.shopifyLocationId}
+                            onChange={(event) =>
+                              updateIntegrationDraft(
+                                provider,
+                                "shopifyLocationId",
+                                event.target.value,
+                              )
+                            }
+                            placeholder="12345678"
+                            className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-slate-500"
+                          />
+                          <span className="text-xs text-slate-400">
+                            Numeric Shopify location ID required for outbound
+                            inventory sync.
+                          </span>
+                        </label>
+                      ) : null}
+
                       {provider === "shiphero" ? (
                         <>
                           <label className="flex flex-col gap-1 text-sm text-slate-700">
@@ -1129,6 +1196,28 @@ export default function InventoryDashboard({
                           : `Save ${title}`}
                       </button>
                     </form>
+
+                    {provider === "shopify" ? (
+                      <div className="mt-3 flex flex-col gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void runShopifySync()}
+                          disabled={shopifySyncing}
+                          className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-400"
+                        >
+                          {shopifySyncing
+                            ? "Syncing to Shopify..."
+                            : "Sync inventory to Shopify"}
+                        </button>
+                        {shopifySyncResult ? (
+                          <p className="text-xs text-slate-500">
+                            Last sync: {shopifySyncResult.synced} synced,{" "}
+                            {shopifySyncResult.skipped} skipped,{" "}
+                            {shopifySyncResult.errors} errors.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               },
@@ -1691,6 +1780,30 @@ export default function InventoryDashboard({
           );
         })}
       </div>
+
+      {totalPages > 1 ? (
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+          <span>
+            Page {page} of {totalPages} ({total} items)
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => goToPage(page - 1)}
+              disabled={page <= 1 || loading}
+              className="rounded-lg border border-slate-300 px-3 py-1 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              ← Prev
+            </button>
+            <button
+              onClick={() => goToPage(page + 1)}
+              disabled={page >= totalPages || loading}
+              className="rounded-lg border border-slate-300 px-3 py-1 text-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

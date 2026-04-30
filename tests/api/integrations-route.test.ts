@@ -176,6 +176,7 @@ describe("/api/integrations", () => {
     expect(update).toHaveBeenCalledWith({
       api_key: null,
       api_secret: null,
+      config: {},
       display_name: "Local Shopify Replay",
       external_account_id: "demo-shop",
       external_shop_domain: "demo-shop.myshopify.com",
