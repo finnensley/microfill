@@ -1,7 +1,7 @@
 # MicroFill Project Status
 
 **Last Updated:** April 30, 2026  
-**Stage:** Outbound Shopify sync + paginated inventory — deployed to production  
+**Stage:** Outbound Shopify sync built + deployed; awaiting Shopify Admin API access token to activate  
 **Owner:** soloSoftwareDev LLC
 
 ---
@@ -105,15 +105,25 @@ MicroFill now has a complete queue-backed webhook pipeline with crash resilience
 
 ### Highest Priority Gaps
 
-- No live ShipHero delivery validated against production credentials
-- Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
-- Outbound Shopify sync requires `shopifyLocationId` set on the tenant's Shopify integration and a valid `api_key` (access token) with `write_inventory` scope
+**Shopify outbound sync — needs access token (blocked)**
+
+- All sync code is deployed. Location ID (`82250760358`) and shop domain (`microfill-2.myshopify.com`) are already configured in `.env.local`.
+- Missing: Shopify Admin API access token (`shpat_...`) with `write_inventory` scope.
+- How to get it: Shopify Admin → Settings → Apps and sales channels → Develop apps → click your app → API credentials tab → **Reveal token once** under "Admin API access token". If already dismissed, uninstall and reinstall the app to regenerate.
+- Once you have it, add to `.env.local`: `SHOPIFY_OUTBOUND_ACCESS_TOKEN=shpat_...`
+- Then apply to production (two options):
+  - **Dashboard**: https://microfill.vercel.app/dashboard → Integrations → Shopify → paste token into **API key** field → Save → click **Sync inventory to Shopify**
+  - **Script**: `NEXT_PUBLIC_SUPABASE_URL=https://czaxkduxoufxeaosuqoy.supabase.co SUPABASE_SERVICE_ROLE_KEY=<hosted key> npm run shopify:sync:apply`
+- Verify with: `npm run shopify:sync:verify`
+
+**No live ShipHero delivery validated**
+
+- Run `npm run webhook:shiphero:live:prepare` then `npm run webhook:shiphero:live:smoke` once ShipHero credentials are available.
 
 ### Secondary Gaps
 
 - No alerting or anomaly-detection channels beyond audit trail and `webhook_events` status
 - Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
-- Outbound Shopify sync requires `shopifyLocationId` and a valid `api_key` (access token with `write_inventory` scope) set on the tenant's Shopify integration
 
 ---
 
@@ -134,18 +144,17 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 ## Immediate Next Steps
 
-1. **Validate live ShipHero delivery** — run `scripts/smoke-test-shiphero-live-webhook.mjs` against the Vercel production URL with a real ShipHero sandbox or webhook replay
-2. **Configure Shopify outbound sync** — set `shopifyLocationId` + `apiKey` (access token with `write_inventory`) on the tenant's Shopify integration via the dashboard, then click **Sync inventory to Shopify** to verify
-3. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts` once Fishbowl credentials are available
+1. **Activate Shopify outbound sync** (resume here)
+   - Get `shpat_...` token from Shopify Admin → Settings → Apps → Develop apps → your app → API credentials → Reveal token
+   - Paste into dashboard API key field OR add to `.env.local` and run `npm run shopify:sync:apply`
+   - Click **Sync inventory to Shopify** on the dashboard to verify
+   - Run `npm run shopify:sync:verify` to confirm config and see item eligibility
+
+2. **Validate live ShipHero delivery** — run `npm run webhook:shiphero:live:smoke` once ShipHero credentials are available
+
+3. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts`
+
 4. **Add alerting** — wire `webhook_events` dead-letter count into a Slack/email alert or Vercel log drain
-
-- The remaining gap is either live ShipHero delivery (requires provider credentials) or a second adapter implementation to prove the pattern works for a different WMS.
-
-Resume checklist:
-
-- If pursuing live ShipHero delivery: obtain provider credentials and run `npm run webhook:shiphero:live:prepare` then `npm run webhook:shiphero:live:smoke`.
-- If pursuing a second adapter: create `src/types/<provider>.ts` + `src/services/wms-adapters/<provider>.ts`, register in `src/services/wms-adapters/index.ts`, and add a route at `src/app/api/webhooks/<provider>/route.ts`.
-- Either path: add the new provider to `managedIntegrationProviders` in `src/types/integrations.ts` if it needs dashboard integration management.
 
 ## Open Decisions
 
@@ -159,14 +168,11 @@ Resume checklist:
 
 ## Known Risks
 
-- ShipHero webhooks still exist before they are fully validated against production-like payloads
-- The MVP ShipHero route remains synchronous, so timeouts or repeated provider retries are still possible under heavier load until queue-backed processing is added in version 2
-- The planned ShipHero version 2 queue foundation has not been created yet, so retry/dead-letter architecture still exists only as a design note
-- No dead-letter or retry queue means repeated failures can still drop operational events
-- Cloudflare quick tunnels remain ephemeral, so live ShipHero smoke success only holds while the current tunnel hostname stays active
-- Audit history is visible, but long-horizon analytics and automated reconciliation jobs are still missing
-- Integration secrets/config can now be managed per tenant in the dashboard, route coverage exists, and tunnel smoke is verified, but live ShipHero delivery is still unverified without provider credentials
-- Dashboard scale behavior is still unknown for large inventories
+- Outbound Shopify sync is deployed but inactive until the access token is set — no inventory is being pushed to Shopify yet
+- Live ShipHero delivery is still unverified without provider credentials
+- Cloudflare tunnels are ephemeral; live smoke tests only hold for the current tunnel hostname
+- No alerting on dead-lettered `webhook_events`; failures are visible in the dashboard queue panel but not actively surfaced
+- Dashboard inventory pagination is server-side but search/filter is still client-side (filters the current page only, not all pages)
 
 ## Local Development Notes
 
