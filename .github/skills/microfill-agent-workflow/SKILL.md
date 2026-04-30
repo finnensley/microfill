@@ -74,6 +74,8 @@ Load this skill when the task involves any of the following:
 - Local stack config lives in `supabase/config.toml`.
 - Local seed data lives in `supabase/seed.sql`.
 - Generated Supabase types live in `src/types/supabase.ts` via `npm run supabase:types`.
+- Pushing migrations to hosted Supabase always requires the DB password env var: `SUPABASE_DB_PASSWORD=pawtoj-byfJu4-vafbog npm run supabase:push`. Without it, the CLI will fail with a login role 400 error.
+- If `db push` fails with `duplicate key value violates unique constraint "schema_migrations_pkey"`, the column already exists but tracking is missing. Fix with: `SUPABASE_DB_PASSWORD=... npx supabase migration repair --status applied <version> --linked`
 
 ### Validation Defaults
 
@@ -96,6 +98,18 @@ Load this skill when the task involves any of the following:
   - `npm run webhook:shiphero:live:prepare`
   - `npm run webhook:shiphero:live:smoke`
   - `npm run webhook:shiphero:live:verify`
+
+### Outbound Shopify Inventory Sync
+
+- The sync service is at `src/services/shopify-sync.ts`. It requires three fields on the tenant's active Shopify integration record: `api_key` (Admin API access token), `external_shop_domain`, and `config.shopifyLocationId`.
+- The Admin API access token starts with `shpat_` — get it from Shopify Admin → Settings → Apps and sales channels → Develop apps → your app → API credentials → Reveal token. It is only shown once; if missed, uninstall and reinstall the app.
+- The API secret key (`shpss_`) is NOT the access token and will not work for REST calls.
+- To check current config and item eligibility: `npm run shopify:sync:verify`
+- To preview what would be written: `npm run shopify:sync:dry-run`
+- To write credentials from `.env.local` into the hosted integration record: `NEXT_PUBLIC_SUPABASE_URL=https://czaxkduxoufxeaosuqoy.supabase.co SUPABASE_SERVICE_ROLE_KEY=<hosted key> npm run shopify:sync:apply`
+- Required `.env.local` vars for apply: `SHOPIFY_OUTBOUND_ACCESS_TOKEN`, `SHOPIFY_OUTBOUND_LOCATION_ID`, `SHOPIFY_OUTBOUND_SHOP_DOMAIN`
+- Known values: location ID = `82250760358`, shop domain = `microfill-2.myshopify.com`
+- Alternatively, paste the token into the dashboard → Integrations → Shopify → API key field → Save.
 
 ### Tunnel Safety
 
