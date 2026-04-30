@@ -198,7 +198,7 @@ export async function PATCH(req: Request) {
   const payload = {
     api_key: normalizeOptionalText(body.apiKey),
     api_secret: normalizeOptionalText(body.apiSecret),
-    config: mergedConfig,
+    config: mergedConfig as import("@/types/supabase").Json,
     display_name: normalizeOptionalText(body.displayName),
     external_account_id: normalizedExternalAccountId,
     external_shop_domain: provider === "shopify" ? normalizedShopDomain : null,
