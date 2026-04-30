@@ -1,6 +1,7 @@
 import type { WmsAdapter, WmsProvider } from "./types";
 import { shipHeroAdapter } from "./shiphero";
 import { fishbowlAdapter } from "./fishbowl";
+import { shopifyAdapter } from "./shopify";
 
 export type { WmsAdapter, WmsNormalizedPayload, WmsProvider } from "./types";
 
@@ -13,6 +14,7 @@ export type { WmsAdapter, WmsNormalizedPayload, WmsProvider } from "./types";
 const registry: Partial<Record<WmsProvider, WmsAdapter>> = {
   shiphero: shipHeroAdapter,
   fishbowl: fishbowlAdapter,
+  shopify: shopifyAdapter,
 };
 
 /**

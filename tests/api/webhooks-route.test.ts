@@ -126,7 +126,7 @@ describe("webhook routes", () => {
     });
   });
 
-  it("processes Shopify order line items with a valid signature", async () => {
+  it("enqueues a Shopify order webhook after signature verification", async () => {
     const payload = {
       id: 101,
       line_items: [{ variant_id: "variant-1", quantity: 2 }],
@@ -144,11 +144,7 @@ describe("webhook routes", () => {
       webhook_secret: secret,
     });
 
-    const shopifyClient = createShopifySupabaseClient({
-      inventoryItem: { id: "item-1" },
-    });
-
-    mockCreateServerSupabaseClient.mockReturnValue(shopifyClient.supabase);
+    mockEnqueueWebhookEvent.mockResolvedValue({ id: "event-uuid-shopify-1" });
 
     const response = await POST_SHOPIFY(
       new Request("http://localhost/api/webhooks/shopify", {
@@ -163,40 +159,24 @@ describe("webhook routes", () => {
       }),
     );
 
-    expect(shopifyClient.rpc).toHaveBeenCalledWith(
-      "increment_committed_quantity",
-      {
-        amount: 2,
-        item_id: "item-1",
-        tenant_id_input: "tenant-1",
-      },
-    );
-    expect(shopifyClient.integrationUpdate.update).toHaveBeenCalledWith(
+    expect(mockEnqueueWebhookEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        last_error: null,
-        last_synced_at: expect.any(String),
+        integration_id: "integration-1",
+        tenant_id: "tenant-1",
+        provider: "shopify",
+        event_type: "orders/create",
+        external_id: "101",
       }),
     );
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
-      failed: 0,
-      lineResults: [
-        {
-          inventoryItemId: "item-1",
-          quantity: 2,
-          status: "processed",
-          variantId: "variant-1",
-        },
-      ],
-      orderId: 101,
-      processed: 1,
-      received: true,
-      skipped: 0,
+      eventId: "event-uuid-shopify-1",
+      queued: true,
       verified: true,
     });
   });
 
-  it("skips Shopify line items that do not include a variant ID", async () => {
+  it("enqueues a Shopify order that contains line items without a variant ID", async () => {
     const payload = {
       id: 102,
       line_items: [
@@ -217,11 +197,7 @@ describe("webhook routes", () => {
       webhook_secret: secret,
     });
 
-    const shopifyClient = createShopifySupabaseClient({
-      inventoryItem: { id: "item-1" },
-    });
-
-    mockCreateServerSupabaseClient.mockReturnValue(shopifyClient.supabase);
+    mockEnqueueWebhookEvent.mockResolvedValue({ id: "event-uuid-shopify-2" });
 
     const response = await POST_SHOPIFY(
       new Request("http://localhost/api/webhooks/shopify", {
@@ -236,40 +212,22 @@ describe("webhook routes", () => {
       }),
     );
 
-    expect(shopifyClient.rpc).toHaveBeenCalledTimes(1);
-    expect(shopifyClient.integrationUpdate.update).toHaveBeenCalledWith(
+    expect(mockEnqueueWebhookEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        last_error:
-          "order=102 processed=1 skipped=1 failed=0 lines=skipped:nonex1:missing_variant_id, processed:variant-1x2",
-        last_synced_at: expect.any(String),
+        provider: "shopify",
+        tenant_id: "tenant-1",
+        external_id: "102",
       }),
     );
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
-      failed: 0,
-      lineResults: [
-        {
-          quantity: 1,
-          reason: "missing_variant_id",
-          status: "skipped",
-          variantId: null,
-        },
-        {
-          inventoryItemId: "item-1",
-          quantity: 2,
-          status: "processed",
-          variantId: "variant-1",
-        },
-      ],
-      orderId: 102,
-      processed: 1,
-      received: true,
-      skipped: 1,
+      eventId: "event-uuid-shopify-2",
+      queued: true,
       verified: true,
     });
   });
 
-  it("reports skipped Shopify variants that do not match local inventory", async () => {
+  it("enqueues a Shopify order even when no local inventory items match", async () => {
     const payload = {
       id: 103,
       line_items: [{ variant_id: "variant-missing", quantity: 1 }],
@@ -287,11 +245,7 @@ describe("webhook routes", () => {
       webhook_secret: secret,
     });
 
-    const shopifyClient = createShopifySupabaseClient({
-      inventoryItem: null,
-    });
-
-    mockCreateServerSupabaseClient.mockReturnValue(shopifyClient.supabase);
+    mockEnqueueWebhookEvent.mockResolvedValue({ id: "event-uuid-shopify-3" });
 
     const response = await POST_SHOPIFY(
       new Request("http://localhost/api/webhooks/shopify", {
@@ -306,34 +260,22 @@ describe("webhook routes", () => {
       }),
     );
 
-    expect(shopifyClient.rpc).not.toHaveBeenCalled();
-    expect(shopifyClient.integrationUpdate.update).toHaveBeenCalledWith(
+    expect(mockEnqueueWebhookEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        last_error:
-          "order=103 processed=0 skipped=1 failed=0 lines=skipped:variant-missingx1:inventory_item_not_found",
-        last_synced_at: expect.any(String),
+        provider: "shopify",
+        tenant_id: "tenant-1",
+        external_id: "103",
       }),
     );
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
-      failed: 0,
-      lineResults: [
-        {
-          quantity: 1,
-          reason: "inventory_item_not_found",
-          status: "skipped",
-          variantId: "variant-missing",
-        },
-      ],
-      orderId: 103,
-      processed: 0,
-      received: true,
-      skipped: 1,
+      eventId: "event-uuid-shopify-3",
+      queued: true,
       verified: true,
     });
   });
 
-  it("stores a Shopify integration error when the webhook signature is invalid", async () => {
+  it("rejects Shopify webhooks with an invalid signature", async () => {
     const payload = {
       id: 104,
       line_items: [{ variant_id: "variant-1", quantity: 1 }],
@@ -345,12 +287,6 @@ describe("webhook routes", () => {
       tenant_id: "tenant-1",
       webhook_secret: "shopify-secret",
     });
-
-    const shopifyClient = createShopifySupabaseClient({
-      inventoryItem: { id: "item-1" },
-    });
-
-    mockCreateServerSupabaseClient.mockReturnValue(shopifyClient.supabase);
 
     const response = await POST_SHOPIFY(
       new Request("http://localhost/api/webhooks/shopify", {
@@ -366,13 +302,7 @@ describe("webhook routes", () => {
     );
 
     expect(response.status).toBe(401);
-    expect(shopifyClient.integrationUpdate.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        last_error:
-          "Invalid Shopify webhook signature for demo-shop.myshopify.com",
-        last_synced_at: expect.any(String),
-      }),
-    );
+    expect(mockEnqueueWebhookEvent).not.toHaveBeenCalled();
   });
 
   it("rejects ShipHero webhooks with an invalid signature", async () => {

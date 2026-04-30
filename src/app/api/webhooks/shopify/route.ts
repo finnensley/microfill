@@ -1,77 +1,37 @@
 import { NextResponse } from "next/server";
-import crypto from "crypto";
-import { createServerSupabaseClient } from "@/lib/supabase-server";
 import { resolveIntegration } from "@/services/integrations";
+import { enqueueWebhookEvent } from "@/services/webhook-queue";
+import { shopifyAdapter } from "@/services/wms-adapters/shopify";
 
-type ShopifyWebhookLineItem = {
-  quantity: number;
-  variant_id: number | string | null;
-};
-
-type ShopifyLineResult = {
-  inventoryItemId?: string;
-  quantity: number;
-  reason?: string;
-  status: "processed" | "skipped" | "failed";
-  variantId: string | null;
-};
-
-type ShopifyWebhookOrder = {
-  id: number | string;
-  line_items?: ShopifyWebhookLineItem[];
-};
-
-function summarizeLineResults(lineResults: ShopifyLineResult[]) {
-  return lineResults
-    .map((lineResult) => {
-      const base = `${lineResult.status}:${lineResult.variantId ?? "none"}x${lineResult.quantity}`;
-      return lineResult.reason ? `${base}:${lineResult.reason}` : base;
-    })
-    .join(", ");
-}
-
-function buildWebhookStatusMessage(params: {
-  failed: number;
-  lineResults: ShopifyLineResult[];
-  orderId: number | string;
-  processed: number;
-  skipped: number;
-}) {
-  const summary = `order=${params.orderId} processed=${params.processed} skipped=${params.skipped} failed=${params.failed}`;
-
-  if (params.failed === 0 && params.skipped === 0) {
-    return null;
-  }
-
-  const lineSummary = summarizeLineResults(params.lineResults);
-  return lineSummary ? `${summary} lines=${lineSummary}` : summary;
-}
-
+/**
+ * Shopify Webhook Handler (queue-backed)
+ *
+ * 1. Verifies the HMAC signature using the Shopify adapter.
+ * 2. Enqueues the verified raw payload for async processing.
+ * 3. Returns 2xx immediately — no inline inventory mutations.
+ *
+ * The queue worker at /api/queue/process handles normalization,
+ * inventory sync (increment_committed_quantity), retry, and dead-letter logic.
+ */
 export async function POST(req: Request) {
   try {
-    const supabase = createServerSupabaseClient();
-    let processed = 0;
-    let skipped = 0;
-    let failed = 0;
-    const lineResults: ShopifyLineResult[] = [];
-
     const shopId = req.headers.get("x-shopify-shop-id");
     const shopDomain = req.headers.get("x-shopify-shop-domain");
     const tenantHeader = req.headers.get("x-tenant-id");
+    const providerMessageId = req.headers.get("x-shopify-webhook-id");
+    const shopifyTopic = req.headers.get("x-shopify-topic");
 
     if (!shopId && !shopDomain && !tenantHeader) {
-      console.error("Missing Shopify Shop ID header");
+      console.error("Missing Shopify source headers");
       return NextResponse.json(
         { error: "Invalid webhook source" },
         { status: 400 },
       );
     }
 
-    // 2. Get the raw body as text for HMAC verification
     const rawBody = await req.text();
-    const hmacHeader = req.headers.get("x-shopify-hmac-sha256")?.trim();
+    const hmacHeader = req.headers.get(shopifyAdapter.hmacHeader)?.trim();
 
-    // 3. Verify HMAC signature - Prevent unauthorized webhook calls
     if (!hmacHeader) {
       console.error("Missing Shopify HMAC header");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -93,37 +53,26 @@ export async function POST(req: Request) {
     }
 
     const resolvedTenantId = integration?.tenant_id ?? tenantHeader ?? shopId;
-    const shopifyWebhookSecret =
+    const webhookSecret =
       integration?.webhook_secret ??
-      process.env["SHOPIFY_WEBHOOK_SECRET"] ??
+      process.env[shopifyAdapter.getEnvSecretKey()] ??
       null;
 
-    if (!shopifyWebhookSecret) {
+    if (!webhookSecret) {
       console.error("No webhook secret available to verify Shopify signature");
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const persistIntegrationStatus = async (lastError: string | null) => {
-      if (!integration?.id) {
-        return;
-      }
 
-      const { error } = await supabase
-        .from("integrations")
-        .update({
-          last_error: lastError,
-          last_synced_at: new Date().toISOString(),
-        })
-        .eq("id", integration.id)
-        .eq("tenant_id", integration.tenant_id);
-
-      if (error) {
-        console.error("Unable to persist Shopify integration status", {
-          error: error.message,
-          integrationId: integration.id,
-          tenantId: integration.tenant_id,
-        });
-      }
-    };
+    if (!shopifyAdapter.verifySignature(rawBody, webhookSecret, hmacHeader)) {
+      console.error("Invalid Shopify webhook signature", {
+        tenantId: resolvedTenantId,
+        shopId,
+        shopDomain,
+        hasIntegration: Boolean(integration),
+        receivedSignaturePrefix: hmacHeader.slice(0, 8),
+      });
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
     if (!resolvedTenantId) {
       console.error("Unable to resolve tenant for Shopify webhook");
@@ -133,173 +82,59 @@ export async function POST(req: Request) {
       );
     }
 
-    const generatedHash = crypto
-      .createHmac("sha256", shopifyWebhookSecret)
-      .update(rawBody, "utf8")
-      .digest("base64");
-    const isSignatureValid =
-      generatedHash.length === hmacHeader.length &&
-      crypto.timingSafeEqual(
-        Buffer.from(generatedHash, "utf8"),
-        Buffer.from(hmacHeader, "utf8"),
-      );
-
-    // 4. Security Check: Compare hashes
-    if (!isSignatureValid) {
-      await persistIntegrationStatus(
-        `Invalid Shopify webhook signature for ${shopDomain ?? shopId ?? resolvedTenantId}`,
-      );
-      console.error("Invalid Shopify webhook signature", {
-        tenantId: resolvedTenantId,
-        shopId,
-        shopDomain,
-        hasIntegration: Boolean(integration),
-        receivedSignaturePrefix: hmacHeader.slice(0, 8),
-        expectedSignaturePrefix: generatedHash.slice(0, 8),
-      });
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // 5. If valid, parse the JSON and update inventory
-    const body = JSON.parse(rawBody) as ShopifyWebhookOrder;
-    const { line_items, id: orderId } = body;
-
-    if (!line_items || line_items.length === 0) {
-      await persistIntegrationStatus(null);
+    // Quick parse for queue metadata (no inventory mutation here)
+    let parsedBody: Record<string, unknown> = {};
+    try {
+      parsedBody = JSON.parse(rawBody) as Record<string, unknown>;
+    } catch {
       return NextResponse.json(
-        {
-          failed,
-          lineResults,
-          processed,
-          received: true,
-          skipped,
-          verified: true,
-        },
-        { status: 200 },
+        { error: "Invalid JSON payload" },
+        { status: 400 },
       );
     }
 
-    // Process each item in the Shopify order
-    for (const item of line_items) {
-      if (
-        item.variant_id === null ||
-        item.variant_id === undefined ||
-        item.variant_id === ""
-      ) {
-        console.warn("Skipping Shopify line item without a variant ID", {
-          orderId,
-          quantity: item.quantity,
-          shopDomain,
-          shopId,
-          tenantId: resolvedTenantId,
-        });
-        lineResults.push({
-          quantity: item.quantity,
-          reason: "missing_variant_id",
-          status: "skipped",
-          variantId: null,
-        });
-        skipped++;
-        continue;
-      }
+    const eventType = shopifyTopic ?? "orders/create";
+    const externalId =
+      typeof parsedBody.id === "string" || typeof parsedBody.id === "number"
+        ? String(parsedBody.id)
+        : null;
 
-      const variantId = item.variant_id.toString();
-      const quantitySold = item.quantity;
+    const event = await enqueueWebhookEvent({
+      tenant_id: resolvedTenantId,
+      integration_id: integration?.id ?? null,
+      provider: "shopify",
+      event_type: eventType,
+      external_id: externalId,
+      provider_message_id: providerMessageId,
+      payload: parsedBody,
+    });
 
-      // Get inventory item by Shopify variant ID AND tenant_id (multi-tenancy)
-      const { data: inventoryItem, error: lookupError } = await supabase
-        .from("inventory_items")
-        .select("id")
-        .eq("tenant_id", resolvedTenantId)
-        .eq("shopify_variant_id", variantId)
-        .single();
-
-      if (lookupError || !inventoryItem) {
-        console.warn(
-          `Inventory item not found for tenant ${resolvedTenantId} variant ${variantId}`,
-        );
-        lineResults.push({
-          quantity: quantitySold,
-          reason: "inventory_item_not_found",
-          status: "skipped",
-          variantId,
-        });
-        skipped++;
-        continue;
-      }
-
-      // Atomically increment committed quantity using database function
-      // This prevents race conditions even under extreme concurrent load
-      // See: supabase/migrations/20260324024110_init_schema.sql for details
-      const { error: syncError } = await supabase.rpc(
-        "increment_committed_quantity",
-        {
-          tenant_id_input: resolvedTenantId,
-          item_id: inventoryItem.id,
-          amount: quantitySold,
-        },
-      );
-
-      if (syncError) {
-        console.error(`Error syncing variant ${variantId}:`, syncError);
-        lineResults.push({
-          inventoryItemId: inventoryItem.id,
-          quantity: quantitySold,
-          reason: syncError.message,
-          status: "failed",
-          variantId,
-        });
-        failed++;
-        continue;
-      }
-
-      lineResults.push({
-        inventoryItemId: inventoryItem.id,
-        quantity: quantitySold,
-        status: "processed",
-        variantId,
-      });
-      processed++;
-    }
-
-    console.info("Processed Shopify webhook", {
-      lineResults,
+    console.info("Shopify webhook enqueued", {
+      eventId: event.id,
       tenantId: resolvedTenantId,
       shopId,
       shopDomain,
-      orderId,
-      processed,
-      skipped,
-      failed,
+      eventType,
+      externalId,
     });
 
-    await persistIntegrationStatus(
-      buildWebhookStatusMessage({
-        failed,
-        lineResults,
-        orderId,
-        processed,
-        skipped,
-      }),
-    );
-
     return NextResponse.json(
-      {
-        failed,
-        lineResults,
-        orderId,
-        processed,
-        received: true,
-        skipped,
-        verified: true,
-      },
-      { status: 200 },
+      { eventId: event.id, queued: true, verified: true },
+      { status: 202 },
     );
   } catch (err) {
-    console.error("Webhook Error:", err);
+    console.error("Shopify webhook error:", err);
     return NextResponse.json(
       { error: "Internal Server Error" },
       { status: 500 },
     );
   }
+}
+
+/**
+ * Shopify HEAD probe — used by Shopify to verify the endpoint is reachable
+ * before registering the webhook subscription.
+ */
+export function HEAD() {
+  return new Response(null, { status: 200 });
 }
