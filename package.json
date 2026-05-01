@@ -27,6 +27,8 @@
     "webhook:shiphero:live:prepare": "node scripts/prepare-shiphero-live-validation.mjs",
     "webhook:shiphero:live:smoke": "node scripts/smoke-test-shiphero-live-webhook.mjs",
     "webhook:shiphero:live:verify": "node scripts/verify-shiphero-live-validation.mjs",
+    "shiphero:simulate:scenarios": "node scripts/simulate-shiphero-scenarios.mjs",
+    "shiphero:simulate:launch": "node scripts/simulate-shiphero-launch.mjs",
     "deploy:check": "node scripts/check-deploy-env.mjs",
     "supabase:link": "npx supabase link",
     "supabase:push": "SUPABASE_DB_PASSWORD=$SUPABASE_DB_PASSWORD npx supabase db push",

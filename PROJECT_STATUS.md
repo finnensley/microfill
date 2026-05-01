@@ -1,14 +1,16 @@
 # MicroFill Project Status
 
 **Last Updated:** April 30, 2026  
-**Stage:** Outbound Shopify sync built + deployed; awaiting Shopify Admin API access token to activate  
+**Stage:** Shopify outbound sync confirmed working end-to-end; live ShipHero delivery is the remaining primary gap  
 **Owner:** soloSoftwareDev LLC
 
 ---
 
 ## Current Position
 
-MicroFill now has a complete queue-backed webhook pipeline with crash resilience, outbound Shopify inventory sync, and server-side paginated inventory access. All verified WMS payloads are enqueued on receipt and processed asynchronously by a Vercel Cron worker. When a `stock_received` event is processed, the worker automatically pushes the updated available quantity to the Shopify REST API (best-effort, non-blocking). Operators can also trigger a full inventory sync manually from the dashboard's Shopify integration card. The inventory API supports server-side pagination (`page`, `pageSize`, `total`) and the dashboard renders pagination controls when results span multiple pages.
+MicroFill now has a complete queue-backed webhook pipeline with crash resilience, confirmed end-to-end outbound Shopify inventory sync, and server-side paginated inventory access. All verified WMS payloads are enqueued on receipt and processed asynchronously by a Vercel Cron worker. When a `stock_received` event is processed, the worker automatically pushes the updated available quantity to the Shopify REST API (best-effort, non-blocking). Operators can also trigger a full inventory sync manually from the dashboard's Shopify integration card. The inventory API supports server-side pagination (`page`, `pageSize`, `total`) and the dashboard renders pagination controls when results span multiple pages.
+
+The Shopify custom app token has been created via the legacy custom app path in Shopify admin, applied to the production integration record, and confirmed working — available quantities for both demo SKUs are correctly reflected in Shopify. Supabase Auth Site URL is configured as `https://micro-fill.app` so magic links route correctly to production. GitHub Actions secrets (`APP_URL`, `CRON_SECRET`) are updated so the process-queue and reconcile-queue workflows run cleanly against production.
 
 ---
 
@@ -45,6 +47,7 @@ MicroFill now has a complete queue-backed webhook pipeline with crash resilience
 - `src/app/api/inventory/shopify-sync/route.ts` — authenticated POST for manual full sync; returns `{ synced, skipped, errors }`
 - `inventory-sync.ts` — calls `pushInventoryToShopify` (best-effort) after every successful `stock_received` event
 - `supabase/migrations/20260430000100_add_shopify_inventory_item_id.sql` — adds `shopify_inventory_item_id TEXT` (nullable) to `inventory_items`
+- **Confirmed working end-to-end as of April 30, 2026** — `SKU-DEMO-BLUE` (available: 41) and `SKU-DEMO-RED` (available: 104) are correctly set in Shopify at location `82250760358`. The `shopify_inventory_item_id` is cached for both SKUs in the production database (`54850109866150` and `54850111013030` respectively).
 
 ### Server-Side Paginated Inventory
 
@@ -82,7 +85,7 @@ MicroFill now has a complete queue-backed webhook pipeline with crash resilience
   - `tests/api/integrations-route.test.ts` (5)
   - `tests/api/webhooks-route.test.ts` (11) — both ShipHero and Shopify tests assert `enqueueWebhookEvent` is called; response is `{ queued: true }`
   - `tests/api/webhook-queue.test.ts` (9) — worker auth, empty queue, success, retry, dead-letter, no adapter, adapter throws
-- 11 Playwright E2E tests against production (`https://microfill.vercel.app`)
+- 11 Playwright E2E tests against production (`https://micro-fill.app`)
   - `tests/e2e/public-pages.spec.ts` — title, login page, dashboard redirect, onboarding redirect
   - `tests/e2e/api-smoke.spec.ts` — webhook 400/401 responses, queue worker auth, integrations/inventory 401, health check, queue status 401, Shopify HEAD probe
 - `tests/__mocks__/server-only.ts` stub so API route test files can be imported by Vitest
@@ -105,20 +108,10 @@ MicroFill now has a complete queue-backed webhook pipeline with crash resilience
 
 ### Highest Priority Gaps
 
-**Shopify outbound sync — needs access token (blocked)**
-
-- All sync code is deployed. Location ID (`82250760358`) and shop domain (`microfill-2.myshopify.com`) are already configured in `.env.local`.
-- Missing: Shopify Admin API access token (`shpat_...`) with `write_inventory` scope.
-- How to get it: Shopify Admin → Settings → Apps and sales channels → Develop apps → click your app → API credentials tab → **Reveal token once** under "Admin API access token". If already dismissed, uninstall and reinstall the app to regenerate.
-- Once you have it, add to `.env.local`: `SHOPIFY_OUTBOUND_ACCESS_TOKEN=shpat_...`
-- Then apply to production (two options):
-  - **Dashboard**: https://microfill.vercel.app/dashboard → Integrations → Shopify → paste token into **API key** field → Save → click **Sync inventory to Shopify**
-  - **Script**: `NEXT_PUBLIC_SUPABASE_URL=https://czaxkduxoufxeaosuqoy.supabase.co SUPABASE_SERVICE_ROLE_KEY=<hosted key> npm run shopify:sync:apply`
-- Verify with: `npm run shopify:sync:verify`
-
 **No live ShipHero delivery validated**
 
 - Run `npm run webhook:shiphero:live:prepare` then `npm run webhook:shiphero:live:smoke` once ShipHero credentials are available.
+- Requires real `SHIPHERO_LIVE_ACCOUNT_ID` and `SHIPHERO_WEBHOOK_SECRET` from the ShipHero provider.
 
 ### Secondary Gaps
 
@@ -144,17 +137,11 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 ## Immediate Next Steps
 
-1. **Activate Shopify outbound sync** (resume here)
-   - Get `shpat_...` token from Shopify Admin → Settings → Apps → Develop apps → your app → API credentials → Reveal token
-   - Paste into dashboard API key field OR add to `.env.local` and run `npm run shopify:sync:apply`
-   - Click **Sync inventory to Shopify** on the dashboard to verify
-   - Run `npm run shopify:sync:verify` to confirm config and see item eligibility
+1. **Validate live ShipHero delivery** — obtain production ShipHero credentials, run `npm run webhook:shiphero:live:prepare` and `npm run webhook:shiphero:live:smoke`, then trigger a real webhook from the ShipHero provider.
 
-2. **Validate live ShipHero delivery** — run `npm run webhook:shiphero:live:smoke` once ShipHero credentials are available
+2. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts`
 
-3. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts`
-
-4. **Add alerting** — wire `webhook_events` dead-letter count into a Slack/email alert or Vercel log drain
+3. **Add alerting** — wire `webhook_events` dead-letter count into a Slack/email alert or Vercel log drain
 
 ## Open Decisions
 
@@ -168,7 +155,6 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 ## Known Risks
 
-- Outbound Shopify sync is deployed but inactive until the access token is set — no inventory is being pushed to Shopify yet
 - Live ShipHero delivery is still unverified without provider credentials
 - Cloudflare tunnels are ephemeral; live smoke tests only hold for the current tunnel hostname
 - No alerting on dead-lettered `webhook_events`; failures are visible in the dashboard queue panel but not actively surfaced
@@ -191,12 +177,14 @@ Run `npm run deploy:check` to verify all are set before deploying.
 ## Current Live Shopify State
 
 - Active development store: `microfill-2.myshopify.com`
-- Current tunnel path: Cloudflare quick tunnel, not localtunnel
-- Current tunnel URL during confirmed validation: `https://models-vat-patent-standing.trycloudflare.com`
-- Local mapped variants:
-  - `SKU-DEMO-BLUE` -> product `15287484154022`, variant `56390813515942`
-  - `SKU-DEMO-RED` -> product `15287484252326`, variant `56390813876390`
-- Real Shopify traffic has reached the route during this session
+- Production URL: `https://micro-fill.app`
+- Supabase Auth Site URL: `https://micro-fill.app` (magic links route correctly to production)
+- GitHub Actions `APP_URL` secret: `https://micro-fill.app`
+- Outbound sync confirmed working at location `82250760358`
+- Playwright `webServer` block disabled in CI — E2E tests run directly against production
+- Mapped variants (production database):
+  - `SKU-DEMO-BLUE` → product `15287484154022`, variant `56390813515942`, inventory_item `54850109866150` (available: 41)
+  - `SKU-DEMO-RED` → product `15287484252326`, variant `56390813876390`, inventory_item `54850111013030` (available: 104)
 - The webhook crash on null `variant_id` is fixed and covered by Vitest
 - Latest automated status: `npx vitest run` passed with 14 tests
 - Latest confirmed live Shopify mutation:
