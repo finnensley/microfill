@@ -327,7 +327,7 @@ if (applyCredentials || dryRun) {
 if (triggerSync) {
   const appUrl = requireConfig(
     "APP_URL",
-    "Set APP_URL in .env.local, e.g. https://microfill.vercel.app",
+    "Set APP_URL in .env.local, e.g. https://micro-fill.app",
   );
   const cronSecret = getConfig("CRON_SECRET");
 
@@ -380,7 +380,7 @@ if (issues.length === 0) {
   if (!hasAccessToken || !hasLocationId) {
     console.log("  Option A — Dashboard (recommended for production):");
     console.log(
-      "    1. Go to https://microfill.vercel.app/dashboard → Integrations → Shopify",
+      "    1. Go to https://micro-fill.app/dashboard → Integrations → Shopify",
     );
     console.log(
       "    2. Enter your Shopify Admin API access token in the API key field.",
