@@ -102,6 +102,20 @@ The Shopify custom app token has been created via the legacy custom app path in 
 - `npm run supabase:push` — pushes pending migrations to hosted Supabase
 - `npm run test:e2e` — runs Playwright E2E suite against `http://localhost:3000`
 
+### ShipHero Local Simulation Tooling
+
+Two scripts for validating the ShipHero pipeline locally without provider credentials:
+
+- `scripts/simulate-shiphero-scenarios.mjs` (`npm run shiphero:simulate:scenarios`) — runs 6 named scenarios end-to-end through the queue pipeline, asserting the exact expected inventory delta after each one:
+  - `receive-stock` — PO Update +7 units, asserts `total_quantity` delta
+  - `ship-order` — Shipment Update -3 units, asserts `total_quantity` delta
+  - `partial-receipt` — 5 of 30 ordered received, confirms only `quantity_received` is applied
+  - `multi-sku` — two SKUs in one PO Update, both deltas asserted
+  - `zero-quantity` — `quantity_received=0`, confirms inventory unchanged
+  - `unknown-sku` — non-existent SKU, confirms graceful no-op not a queue error
+
+- `scripts/simulate-shiphero-launch.mjs` (`npm run shiphero:simulate:launch`) — simulates a high-concurrency item launch: pre-stocks a SKU via PO Update, fires hundreds of concurrent Shipment Updates (configurable via `--stock`, `--orders`, `--sku`, `--concurrency`), drains the queue, and reports final inventory state. Surfaces floor-protection behavior: even when demand exceeds stock, `available-for-sale = max(0, total - committed - floor)` ensures Shopify never sees a negative number.
+
 ---
 
 ## What Is Not Done
@@ -110,8 +124,9 @@ The Shopify custom app token has been created via the legacy custom app path in 
 
 **No live ShipHero delivery validated**
 
-- Run `npm run webhook:shiphero:live:prepare` then `npm run webhook:shiphero:live:smoke` once ShipHero credentials are available.
-- Requires real `SHIPHERO_LIVE_ACCOUNT_ID` and `SHIPHERO_WEBHOOK_SECRET` from the ShipHero provider.
+- The pipeline is fully exercised locally via `npm run shiphero:simulate:scenarios` and `npm run shiphero:simulate:launch`.
+- Live provider delivery still requires real `SHIPHERO_LIVE_ACCOUNT_ID` and `SHIPHERO_WEBHOOK_SECRET` from ShipHero.
+- Once credentials are available: `npm run webhook:shiphero:live:prepare` then `npm run webhook:shiphero:live:smoke`.
 
 ### Secondary Gaps
 
@@ -137,7 +152,7 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 ## Immediate Next Steps
 
-1. **Validate live ShipHero delivery** — obtain production ShipHero credentials, run `npm run webhook:shiphero:live:prepare` and `npm run webhook:shiphero:live:smoke`, then trigger a real webhook from the ShipHero provider.
+1. **Validate live ShipHero delivery** — local simulation (`npm run shiphero:simulate:scenarios` and `npm run shiphero:simulate:launch`) fully exercises the pipeline. Once provider credentials arrive, run `npm run webhook:shiphero:live:prepare` and `npm run webhook:shiphero:live:smoke`, then trigger a real webhook from ShipHero.
 
 2. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts`
 
@@ -147,7 +162,7 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 ### Integration Testing
 
-- Use recorded payload fixtures only, or require live/sandbox Shopify and ShipHero testing during development?
+- Recorded payload fixtures and local simulation scripts (`shiphero:simulate:scenarios`, `shiphero:simulate:launch`) cover the ShipHero pipeline locally. Live/sandbox testing with provider credentials is still needed for final sign-off.
 
 ### Scope Control
 

@@ -173,6 +173,8 @@ npm test
 - Run `npm test` after changes to dashboard API routes or webhook handlers.
 - Replay the saved Shopify order fixture with `npm run webhook:replay:shopify`.
 - Replay the saved ShipHero PO and shipment fixtures with `npm run webhook:replay:shiphero:po` and `npm run webhook:replay:shiphero:shipment`.
+- Run the full ShipHero scenario suite (6 named scenarios with pass/fail assertions) with `npm run shiphero:simulate:scenarios`.
+- Simulate a high-concurrency launch (hundreds of concurrent orders against limited stock) with `npm run shiphero:simulate:launch`. Accepts `--stock`, `--orders`, `--sku`, and `--concurrency` flags.
 - Use a Cloudflare quick tunnel only when validating real third-party webhook delivery.
 
 ## Live Shopify Validation
@@ -269,6 +271,11 @@ As of April 30, 2026, the ShipHero path is partially validated.
 - The webhook route correctly verifies ShipHero HMAC signatures.
 - Cloudflare tunnel smoke tests return `200`, confirming the production endpoint is reachable.
 - A real provider-initiated ShipHero delivery is still pending production credentials.
+
+**Local simulation tooling** is available while waiting for provider access:
+
+- `npm run shiphero:simulate:scenarios` — runs 6 named scenarios (receive-stock, ship-order, partial-receipt, multi-sku, zero-quantity, unknown-sku) end-to-end through the queue pipeline, with pass/fail assertions on the resulting inventory state.
+- `npm run shiphero:simulate:launch` — fires hundreds of concurrent Shipment Update webhooks against limited stock to validate atomic consistency and floor-protection behavior under oversell conditions. Configurable via `--stock`, `--orders`, `--sku`, and `--concurrency` flags.
 
 ## CI/CD and GitHub Actions
 
