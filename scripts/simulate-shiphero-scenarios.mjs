@@ -118,7 +118,7 @@ async function postWebhook(payload) {
     body,
   });
   const text = await res.text();
-  if (res.status !== 202)
+  if (res.status !== 200 && res.status !== 202)
     throw new Error(`Webhook POST returned ${res.status}: ${text}`);
   const json = JSON.parse(text);
   return json.eventId;
@@ -143,7 +143,7 @@ async function pollEventStatus(eventId, timeoutMs = 12000, intervalMs = 400) {
   while (Date.now() < deadline) {
     await new Promise((r) => setTimeout(r, intervalMs));
     const rows = await supabaseRest(
-      `webhook_events?id=eq.${encodeURIComponent(eventId)}&select=status,attempts,error&limit=1`,
+      `webhook_events?id=eq.${encodeURIComponent(eventId)}&select=status,attempts,last_error&limit=1`,
     );
     const event = rows[0];
     if (

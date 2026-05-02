@@ -165,7 +165,7 @@ async function postWebhook(payload) {
     },
     body,
   });
-  if (res.status !== 202) {
+  if (res.status !== 200 && res.status !== 202) {
     const text = await res.text();
     throw new Error(`Webhook POST returned ${res.status}: ${text}`);
   }
@@ -266,6 +266,7 @@ async function drainQueue(maxRounds = 20) {
 
 /**
  * Query final status counts for a set of event IDs.
+ * Chunks requests to avoid 414 URI Too Long when there are many IDs.
  */
 async function getEventStatusCounts(eventIds) {
   if (eventIds.length === 0)
@@ -277,10 +278,6 @@ async function getEventStatusCounts(eventIds) {
       processing: 0,
       other: 0,
     };
-  const inList = eventIds.map((id) => `"${id}"`).join(",");
-  const rows = await supabaseRest(
-    `webhook_events?id=in.(${inList})&select=status&limit=${eventIds.length + 1}`,
-  );
   const counts = {
     succeeded: 0,
     failed: 0,
@@ -289,9 +286,17 @@ async function getEventStatusCounts(eventIds) {
     processing: 0,
     other: 0,
   };
-  for (const row of rows) {
-    if (row.status in counts) counts[row.status]++;
-    else counts.other++;
+  const CHUNK_SIZE = 20;
+  for (let i = 0; i < eventIds.length; i += CHUNK_SIZE) {
+    const chunk = eventIds.slice(i, i + CHUNK_SIZE);
+    const inList = chunk.map((id) => `"${id}"`).join(",");
+    const rows = await supabaseRest(
+      `webhook_events?id=in.(${inList})&select=status&limit=${chunk.length + 1}`,
+    );
+    for (const row of rows) {
+      if (row.status in counts) counts[row.status]++;
+      else counts.other++;
+    }
   }
   return counts;
 }
