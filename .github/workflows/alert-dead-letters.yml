@@ -1,0 +1,56 @@
+name: Alert Dead-Lettered Webhook Events
+
+on:
+  schedule:
+    # Every 30 minutes — checks for webhook_events that exhausted all retries
+    # and are stuck in dead_letter status. When any are found, this job fails
+    # and GitHub sends the repository owner a failure email.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: # allow manual check from GitHub UI
+
+jobs:
+  check-dead-letters:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for dead-lettered events
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.APP_URL }}/api/queue/alert")
+
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          HTTP_STATUS=$(echo "$RESPONSE" | tail -n 1)
+
+          echo "Response status: $HTTP_STATUS"
+          echo "Response body: $BODY"
+
+          if [ "$HTTP_STATUS" -eq 401 ]; then
+            echo "Alert endpoint returned 401 — check CRON_SECRET secret."
+            exit 1
+          fi
+
+          if [ "$HTTP_STATUS" -ge 500 ]; then
+            echo "Alert endpoint returned server error $HTTP_STATUS."
+            exit 1
+          fi
+
+          if [ "$HTTP_STATUS" -eq 409 ]; then
+            echo ""
+            echo "DEAD-LETTER ALERT: One or more webhook events have exhausted"
+            echo "all retry attempts and require operator attention."
+            echo ""
+            echo "Dead-letter details:"
+            echo "$BODY" | python3 -c "
+          import json, sys
+          data = json.load(sys.stdin)
+          print(f'  Count: {data[\"dead_letter_count\"]}')
+          for s in data.get('samples', []):
+              print(f'  - [{s[\"provider\"]}] {s[\"event_type\"]} | id={s[\"id\"]} | attempts={s[\"attempts\"]}/{s[\"max_attempts\"]} | error={s[\"last_error\"]} | updated={s[\"updated_at\"]}')
+          "
+            echo ""
+            echo "To resolve: review the webhook_events table in the dashboard"
+            echo "queue panel and investigate the last_error for each event."
+            exit 1
+          fi
+
+          echo "Queue is clean — no dead-lettered events."

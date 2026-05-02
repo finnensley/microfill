@@ -85,6 +85,7 @@ The Shopify custom app token has been created via the legacy custom app path in 
   - `tests/api/integrations-route.test.ts` (5)
   - `tests/api/webhooks-route.test.ts` (11) — both ShipHero and Shopify tests assert `enqueueWebhookEvent` is called; response is `{ queued: true }`
   - `tests/api/webhook-queue.test.ts` (9) — worker auth, empty queue, success, retry, dead-letter, no adapter, adapter throws
+  - `tests/api/queue-alert.test.ts` (6) — CRON_SECRET auth, clean queue, dead-letter detection, Supabase error handling
 - 11 Playwright E2E tests against production (`https://micro-fill.app`)
   - `tests/e2e/public-pages.spec.ts` — title, login page, dashboard redirect, onboarding redirect
   - `tests/e2e/api-smoke.spec.ts` — webhook 400/401 responses, queue worker auth, integrations/inventory 401, health check, queue status 401, Shopify HEAD probe
@@ -101,6 +102,11 @@ The Shopify custom app token has been created via the legacy custom app path in 
 - `npm run supabase:link` — links local CLI to hosted project
 - `npm run supabase:push` — pushes pending migrations to hosted Supabase
 - `npm run test:e2e` — runs Playwright E2E suite against `http://localhost:3000`
+
+### Dead-Letter Alerting
+
+- `GET /api/queue/alert` (CRON_SECRET protected) — returns `200 { alert: false }` when the queue is clean; returns `409 { alert: true, dead_letter_count, samples }` when any events have exhausted all retries
+- `.github/workflows/alert-dead-letters.yml` — runs every 30 minutes, calls the alert endpoint, prints dead-letter details, and exits non-zero if any are found. GitHub sends the repository owner a failure email automatically.
 
 ### ShipHero Local Simulation Tooling
 
@@ -130,8 +136,8 @@ Two scripts for validating the ShipHero pipeline locally without provider creden
 
 ### Secondary Gaps
 
-- No alerting or anomaly-detection channels beyond audit trail and `webhook_events` status
 - Fishbowl adapter `verifySignature` and `normalize` not yet implemented (stub is safe — always rejects)
+- Dashboard inventory search/filter is client-side only (filters the current page, not all pages)
 
 ---
 
@@ -156,7 +162,7 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 2. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts`
 
-3. **Add alerting** — wire `webhook_events` dead-letter count into a Slack/email alert or Vercel log drain
+3. ~~Add alerting~~ **Done** — `GET /api/queue/alert` + `.github/workflows/alert-dead-letters.yml` surface dead-letter events via GitHub failure email every 30 minutes
 
 ## Open Decisions
 
@@ -172,7 +178,6 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 - Live ShipHero delivery is still unverified without provider credentials
 - Cloudflare tunnels are ephemeral; live smoke tests only hold for the current tunnel hostname
-- No alerting on dead-lettered `webhook_events`; failures are visible in the dashboard queue panel but not actively surfaced
 - Dashboard inventory pagination is server-side but search/filter is still client-side (filters the current page only, not all pages)
 
 ## Local Development Notes
