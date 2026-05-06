@@ -33,7 +33,8 @@ export default function LandingPage() {
         </h1>
         <p className="text-xl text-slate-400 mb-10 leading-relaxed">
           The lightweight, security-first sync tool for micro-fulfillment. Stop
-          manual tallying. Scan in, sync out, and never oversell again.
+          manual tallying. Inbound warehouse updates sync automatically to
+          Shopify, so you never oversell again.
         </p>
 
         <form
