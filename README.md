@@ -62,7 +62,7 @@ MicroFill solves the race-condition problem through three layers of protection:
 
 All inbound webhooks from Shopify and ShipHero are handled asynchronously. Upon receipt, the webhook route verifies the HMAC signature, enqueues the raw event into the `webhook_events` database table, and immediately returns a `202 Accepted` response. This ensures that even during a traffic spike, webhook providers receive a fast response preventing timeouts and retries.
 
-A separate worker, triggered by a Vercel Cron Job every minute (with a GitHub Actions fallback every 5 minutes), claims a batch of events using `SELECT FOR UPDATE SKIP LOCKED` to prevent race conditions between multiple worker instances. Each event is normalized through a provider-specific WMS adapter and processed. The system uses exponential backoff for retries and dead-letters events after repeated failures. A separate reconciliation job runs every 15 minutes to reset any events stuck in `processing` due to worker crashes.
+A separate worker, triggered by a Vercel Cron Job every minute, claims a batch of events using `SELECT FOR UPDATE SKIP LOCKED` to prevent race conditions between multiple worker instances. Each event is normalized through a provider-specific WMS adapter and processed. The system uses exponential backoff for retries and dead-letters events after repeated failures. A separate reconciliation job runs hourly to reset any events stuck in `processing` due to worker crashes.
 
 ### Data Model
 
@@ -279,12 +279,12 @@ As of April 30, 2026, the ShipHero path is partially validated.
 
 ## CI/CD and GitHub Actions
 
-Five scheduled workflows run against production:
+Current workflows:
 
 - **`route-validation.yml`** — Vitest unit tests on every push and PR
 - **`e2e-smoke.yml`** — Playwright E2E tests against `https://micro-fill.app` on every push to `main`
-- **`process-queue.yml`** — GitHub Actions fallback queue worker (every 5 minutes)
-- **`reconcile-queue.yml`** — Resets events stuck in `processing` (every 15 minutes)
+- **`reconcile-queue.yml`** — Resets events stuck in `processing` (hourly)
+- **`alert-dead-letters.yml`** — Checks for dead-lettered events (every 2 hours), fails on alert to trigger GitHub notification email
 - **`keep-supabase-active.yml`** — Pings `/api/health` every 5 days to prevent Supabase free-tier pause
 
 Required GitHub Actions secrets: `APP_URL` (set to `https://micro-fill.app`) and `CRON_SECRET`.

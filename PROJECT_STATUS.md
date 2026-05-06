@@ -1,6 +1,6 @@
 # MicroFill Project Status
 
-**Last Updated:** April 30, 2026  
+**Last Updated:** May 6, 2026  
 **Stage:** Shopify outbound sync confirmed working end-to-end; live ShipHero delivery is the remaining primary gap  
 **Owner:** soloSoftwareDev LLC
 
@@ -26,7 +26,7 @@ The Shopify custom app token has been created via the legacy custom app path in 
 - `inventory_items`, `integrations`, `audit_logs`, `tenants`, `user_tenant_assignments` schemas
 - `webhook_events` queue table (migration `20260429000200`) with `claim_webhook_events` RPC using `SELECT FOR UPDATE SKIP LOCKED` for safe concurrent workers
 - Generic `sync_wms_stock_received` / `sync_wms_stock_shipped` RPCs (renamed from ShipHero-specific names)
-- RLS enabled on all tables; service-role bypass policy on `webhook_events`
+- RLS enabled on all tenant-scoped tables with authenticated tenant-isolation policies (migration `20260506000100_fix_rls_policies.sql`); service-role access bypasses RLS for backend workers/routes
 
 ### Auth And Access
 
@@ -161,7 +161,7 @@ Run `npm run deploy:check` to verify all are set before deploying.
 
 2. **Complete Fishbowl adapter** — fill in `verifySignature` and `normalize` in `src/services/wms-adapters/fishbowl.ts`
 
-3. ~~Add alerting~~ **Done** — `GET /api/queue/alert` + `.github/workflows/alert-dead-letters.yml` surface dead-letter events via GitHub failure email every 30 minutes
+3. ~~Add alerting~~ **Done** — `GET /api/queue/alert` + `.github/workflows/alert-dead-letters.yml` surface dead-letter events via GitHub failure email every 2 hours
 
 ## Open Decisions
 
