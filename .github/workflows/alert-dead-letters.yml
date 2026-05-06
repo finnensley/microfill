@@ -2,10 +2,10 @@ name: Alert Dead-Lettered Webhook Events
 
 on:
   schedule:
-    # Every 30 minutes — checks for webhook_events that exhausted all retries
+    # Every 2 hours — checks for webhook_events that exhausted all retries
     # and are stuck in dead_letter status. When any are found, this job fails
     # and GitHub sends the repository owner a failure email.
-    - cron: "*/30 * * * *"
+    - cron: "0 */2 * * *"
   workflow_dispatch: # allow manual check from GitHub UI
 
 jobs:

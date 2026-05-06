@@ -2,10 +2,10 @@ name: Reconcile Stuck Webhook Events
 
 on:
   schedule:
-    # Every 15 minutes — resets webhook_events stuck in `processing`
+    # Every hour — resets webhook_events stuck in `processing`
     # back to `pending` so the queue worker can retry them.
     # Protects against silent data loss when a worker crashes mid-batch.
-    - cron: "*/15 * * * *"
+    - cron: "0 * * * *"
   workflow_dispatch: # allow manual trigger from GitHub UI
 
 jobs:

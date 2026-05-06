@@ -10,7 +10,7 @@
 
 MicroFill now has a complete queue-backed webhook pipeline with crash resilience, confirmed end-to-end outbound Shopify inventory sync, and server-side paginated inventory access. All verified WMS payloads are enqueued on receipt and processed asynchronously by a Vercel Cron worker. When a `stock_received` event is processed, the worker automatically pushes the updated available quantity to the Shopify REST API (best-effort, non-blocking). Operators can also trigger a full inventory sync manually from the dashboard's Shopify integration card. The inventory API supports server-side pagination (`page`, `pageSize`, `total`) and the dashboard renders pagination controls when results span multiple pages.
 
-The Shopify custom app token has been created via the legacy custom app path in Shopify admin, applied to the production integration record, and confirmed working — available quantities for both demo SKUs are correctly reflected in Shopify. Supabase Auth Site URL is configured as `https://micro-fill.app` so magic links route correctly to production. GitHub Actions secrets (`APP_URL`, `CRON_SECRET`) are updated so the process-queue and reconcile-queue workflows run cleanly against production.
+The Shopify custom app token has been created via the legacy custom app path in Shopify admin, applied to the production integration record, and confirmed working — available quantities for both demo SKUs are correctly reflected in Shopify. Supabase Auth Site URL is configured as `https://micro-fill.app` so magic links route correctly to production. GitHub Actions secrets (`APP_URL`, `CRON_SECRET`) are updated so the reconcile-queue workflow runs cleanly against production.
 
 ---
 
@@ -74,8 +74,7 @@ The Shopify custom app token has been created via the legacy custom app path in 
 - `src/app/api/queue/status/route.ts` — authenticated endpoint returning per-status counts + recent failures for the dashboard panel
 - `src/app/api/health/route.ts` — unauthenticated liveness probe; queries DB and returns `{ ok, db, timestamp }`
 - `vercel.json` — cron config: `/api/queue/process` every minute
-- `.github/workflows/process-queue.yml` — GitHub Actions fallback cron (every 5 min) for queue worker
-- `.github/workflows/reconcile-queue.yml` — GitHub Actions cron (every 15 min) calling `/api/queue/reconcile` to reset stuck events
+- `.github/workflows/reconcile-queue.yml` — GitHub Actions cron (every hour) calling `/api/queue/reconcile` to reset stuck events
 - `.github/workflows/keep-supabase-active.yml` — pings `/api/health` every 5 days to prevent Supabase free-tier pause
 
 ### Automated Coverage
@@ -106,7 +105,7 @@ The Shopify custom app token has been created via the legacy custom app path in 
 ### Dead-Letter Alerting
 
 - `GET /api/queue/alert` (CRON_SECRET protected) — returns `200 { alert: false }` when the queue is clean; returns `409 { alert: true, dead_letter_count, samples }` when any events have exhausted all retries
-- `.github/workflows/alert-dead-letters.yml` — runs every 30 minutes, calls the alert endpoint, prints dead-letter details, and exits non-zero if any are found. GitHub sends the repository owner a failure email automatically.
+- `.github/workflows/alert-dead-letters.yml` — runs every 2 hours, calls the alert endpoint, prints dead-letter details, and exits non-zero if any are found. GitHub sends the repository owner a failure email automatically.
 
 ### ShipHero Local Simulation Tooling
 
